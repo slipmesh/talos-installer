@@ -1,7 +1,7 @@
 # Assembles a bootable Talos installer image from a signed kernel (../talos-kernel) and
 # any number of system extensions (../talos-awg-extension, ../talos-router-extension, or
 # anything else that publishes a Talos extension image) - the final "glue" step of a
-# split four-repo pipeline. See README, "This is one of four repos".
+# split five-repo pipeline. See README, "This is one of five repos".
 #
 # Deliberately generic: this repo has no source-level knowledge of awg/router/anything
 # else, only OCI image references passed in on the command line. Adding a fifth extension

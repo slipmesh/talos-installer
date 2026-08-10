@@ -1,23 +1,24 @@
 # talos-installer
 
 Assembles a bootable Talos installer image from a signed kernel and any number of system
-extensions — the final "glue" step of a split four-repo pipeline. Deliberately generic:
+extensions — the final "glue" step of a split five-repo pipeline. Deliberately generic:
 this repo has no source-level knowledge of `awg`/`router`/anything else, only OCI image
 references passed in on the command line. Adding a fifth extension later needs zero
 changes here.
 
 Builds with **Docker** (`docker buildx`), on any machine, for any target architecture.
 
-## This is one of four repos
+## This is one of five repos
 
 ```
 talos-kernel                            -> signed kernel + amneziawg-pkg
 talos-awg-extension                     -> amneziawg system extension (pulls amneziawg-pkg)
 talos-router-extension                  -> router system extension (no kernel dependency)
+talos-nftables-extension                -> nftables system extension (no kernel dependency)
 talos-installer             (this repo) -> assembles kernel + N extensions into an installer
 ```
 
-This repo consumes the other three's *published* images only, by tag - it never checks
+This repo consumes the other four's *published* images only, by tag - it never checks
 out or builds their source. See `docs/kernel-signing.md` for how a signed kernel actually
 ends up inside the final installer without needing a custom `imager` image.
 
