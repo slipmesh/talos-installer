@@ -155,8 +155,14 @@ installer: checkout-talos | $(OUT_DIR) ## Bake an installer image from KERNEL_IM
 	  echo "  outFormat: raw"; \
 	} > $(OUT_DIR)/profile.yaml
 	@echo "==> baking installer for $(TALOS_VERSION)/$(TARGET_ARCH)"
+	# No :z on this bind mount: on a host without SELinux, it doesn't just no-op the way :z
+	# suffixes usually do elsewhere - confirmed directly, this exact command with :z has
+	# the imager fail with "error opening OCI layout: stat /out/base-oci/index.json: no
+	# such file or directory" even though the file demonstrably exists and is readable via
+	# a plain (non-:z) bind mount of the same host path in a throwaway container run right
+	# after the failure. Dropping :z fixes it outright, no other change needed.
 	@docker run --rm -i --privileged --network host \
-	  -v $(PWD)/$(OUT_DIR):/out:z \
+	  -v $(PWD)/$(OUT_DIR):/out \
 	  -v $(PWD)/$(CUSTOM_KERNEL_DIR)/vmlinuz-$(TARGET_ARCH):/usr/install/$(TARGET_ARCH)/vmlinuz:ro \
 	  -v $(PWD)/$(CUSTOM_KERNEL_DIR)/initramfs-$(TARGET_ARCH).xz:/usr/install/$(TARGET_ARCH)/initramfs.xz:ro \
 	  -v /dev:/dev $(IMAGER) - --insecure \
