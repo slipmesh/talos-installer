@@ -163,26 +163,42 @@ installer: checkout-talos | $(OUT_DIR) ## Bake an installer image from KERNEL_IM
 	  < $(OUT_DIR)/profile.yaml
 	@docker load -q -i $(OUT_DIR)/installer-$(TARGET_ARCH).tar >/dev/null
 	@docker image inspect $(INSTALLER_IMAGE) --format 'built $(INSTALLER_IMAGE) arch={{.Architecture}} size={{.Size}}'
+	@echo -n "$(INSTALLER_IMAGE)" > $(OUT_DIR)/installer-image.txt
+	@echo -n "$(MANIFEST_IMAGE)" > $(OUT_DIR)/manifest-image.txt
 
+# push/push-manifest read the tag back from what `installer` wrote instead of
+# recomputing BUILD_SLUG from KERNEL_IMAGE/EXTENSIONS - those aren't required again here
+# on purpose. Recomputing was tried first and is a real footgun: BUILD_SLUG silently
+# resolves to a *different* tag than the one actually built the moment KERNEL_IMAGE/
+# EXTENSIONS aren't passed identically to every target in the same invocation (confirmed
+# directly - `make installer KERNEL_IMAGE=... EXTENSIONS=...` followed by a bare `make
+# push` tried to push a tag that was never built).
 .PHONY: push
 push: ## Push this arch's installer (intermediate - see push-manifest for what nodes pull).
-	@docker push $(INSTALLER_IMAGE)
-	@echo "pushed $(INSTALLER_IMAGE) - run push-manifest once every arch you need is pushed"
+	@[ -f $(OUT_DIR)/installer-image.txt ] || { echo "no build/out-$(TARGET_ARCH)/installer-image.txt - run 'make installer' first (same invocation or a prior one)"; exit 1; }
+	@img=$$(cat $(OUT_DIR)/installer-image.txt); \
+	docker push "$$img"; \
+	echo "pushed $$img - run push-manifest once every arch you need is pushed"
 
 .PHONY: push-manifest
 push-manifest: ## Combine the per-arch installers already in the registry into one multi-arch tag.
-	@for a in $(ARCHS); do \
-	  img="$(IMAGE):installer-$(TALOS_VERSION)-$(BUILD_SLUG)-$$a"; \
-	  docker image inspect "$$img" >/dev/null 2>&1 || { echo "missing $$img locally - run: make installer push TARGET_ARCH=$$a KERNEL_IMAGE=... EXTENSIONS=..."; exit 1; }; \
-	done
-	@docker manifest rm $(MANIFEST_IMAGE) >/dev/null 2>&1 || true
-	@docker manifest create $(MANIFEST_IMAGE) \
-	  $(foreach a,$(ARCHS),$(IMAGE):installer-$(TALOS_VERSION)-$(BUILD_SLUG)-$(a)) >/dev/null
-	@docker manifest push $(MANIFEST_IMAGE)
-	@echo
-	@echo "pushed multi-arch $(MANIFEST_IMAGE) ($(ARCHS))"
-	@echo "upgrade a node with:"
-	@echo "  talosctl -n <node> upgrade --image $(MANIFEST_IMAGE)"
+	@manifest=""; \
+	imgs=""; \
+	for a in $(ARCHS); do \
+	  f=$(BUILD_DIR)/out-$$a/installer-image.txt; \
+	  [ -f "$$f" ] || { echo "missing $$f - run: make installer push TARGET_ARCH=$$a KERNEL_IMAGE=... EXTENSIONS=..."; exit 1; }; \
+	  img=$$(cat "$$f"); \
+	  docker image inspect "$$img" >/dev/null 2>&1 || docker pull -q "$$img" >/dev/null; \
+	  imgs="$$imgs $$img"; \
+	  manifest=$$(cat $(BUILD_DIR)/out-$$a/manifest-image.txt); \
+	done; \
+	docker manifest rm "$$manifest" >/dev/null 2>&1 || true; \
+	docker manifest create "$$manifest" $$imgs >/dev/null; \
+	docker manifest push "$$manifest"; \
+	echo; \
+	echo "pushed multi-arch $$manifest ($(ARCHS))"; \
+	echo "upgrade a node with:"; \
+	echo "  talosctl -n <node> upgrade --image $$manifest"
 
 .PHONY: release
 release: ## Build+push every arch and publish the multi-arch tag - the one command for a release.
