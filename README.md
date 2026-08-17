@@ -30,14 +30,14 @@ demanding both every time:
 
 ```sh
 make print-config TARGET_ARCH=amd64 \
-  KERNEL_IMAGE=docker.io/ffaxl/kernel:v1.13.8-awg-ce16310 \
-  EXTENSIONS="docker.io/ffaxl/talos:extension-v1.13.8-awg-1422b3d-amd64 docker.io/ffaxl/talos:extension-v1.13.8-router-abc1234-amd64"
+  KERNEL_IMAGE=ghcr.io/slipmesh/kernel:v1.13.8-awg-ce16310 \
+  EXTENSIONS="ghcr.io/slipmesh/talos-awg-extension:extension-v1.13.8-awg-1422b3d-amd64 ghcr.io/slipmesh/talos-router-extension:extension-v1.13.8-router-abc1234-amd64"
 
 make preflight   # docker/buildx/git/jq present, KERNEL_IMAGE/EXTENSIONS set
 
 make installer TARGET_ARCH=amd64 \
-  KERNEL_IMAGE=docker.io/ffaxl/kernel:v1.13.8-awg-ce16310 \
-  EXTENSIONS="docker.io/ffaxl/talos:extension-v1.13.8-awg-1422b3d-amd64 docker.io/ffaxl/talos:extension-v1.13.8-router-abc1234-amd64"
+  KERNEL_IMAGE=ghcr.io/slipmesh/kernel:v1.13.8-awg-ce16310 \
+  EXTENSIONS="ghcr.io/slipmesh/talos-awg-extension:extension-v1.13.8-awg-1422b3d-amd64 ghcr.io/slipmesh/talos-router-extension:extension-v1.13.8-router-abc1234-amd64"
 
 make push TARGET_ARCH=amd64
 ```
@@ -62,7 +62,7 @@ Then, per node (check `make print-config` for the exact tag - or just read what
 `make installer`/`release` printed):
 
 ```sh
-talosctl -n <node> upgrade --image docker.io/ffaxl/talos:installer-<talos>-<build-slug>
+talosctl -n <node> upgrade --image ghcr.io/slipmesh/talos-installer:installer-<talos>-<build-slug>
 ```
 
 ## How it works
