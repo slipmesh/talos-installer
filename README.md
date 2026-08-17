@@ -31,13 +31,13 @@ demanding both every time:
 ```sh
 make print-config TARGET_ARCH=amd64 \
   KERNEL_IMAGE=ghcr.io/slipmesh/kernel:v0.1.0-talos1.13.8 \
-  EXTENSIONS="ghcr.io/slipmesh/talos-awg-extension:v0.1.0-awgce16310-amd64 ghcr.io/slipmesh/talos-router-extension:v0.1.0-bird2.18-amd64"
+  EXTENSIONS="ghcr.io/slipmesh/talos-awg-extension:v0.1.0-talos1.13.8-amd64 ghcr.io/slipmesh/talos-router-extension:v0.1.0-bird2.18-amd64"
 
 make preflight   # docker/buildx/git/jq present, KERNEL_IMAGE/EXTENSIONS set
 
 make installer TARGET_ARCH=amd64 \
   KERNEL_IMAGE=ghcr.io/slipmesh/kernel:v0.1.0-talos1.13.8 \
-  EXTENSIONS="ghcr.io/slipmesh/talos-awg-extension:v0.1.0-awgce16310-amd64 ghcr.io/slipmesh/talos-router-extension:v0.1.0-bird2.18-amd64"
+  EXTENSIONS="ghcr.io/slipmesh/talos-awg-extension:v0.1.0-talos1.13.8-amd64 ghcr.io/slipmesh/talos-router-extension:v0.1.0-bird2.18-amd64"
 
 make push TARGET_ARCH=amd64
 ```
