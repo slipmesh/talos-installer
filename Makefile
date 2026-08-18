@@ -28,9 +28,17 @@ endif
 # Required inputs for `installer`/`release` - no defaults on purpose, a silently-wrong
 # kernel or an accidentally-dropped extension is worse than a loud error demanding both
 # be named explicitly every time. See README, "Usage".
+#
+# EXTENSIONS entries are ARCH-LESS base refs (no trailing -amd64/-arm64) - `installer`
+# appends -$(TARGET_ARCH) itself when building each systemExtensions imageRef. This is
+# load-bearing, not cosmetic: every extension repo (router/nftables/awg-extension)
+# publishes its final tag with an arch suffix, never a multi-arch manifest, so a single
+# EXTENSIONS string has to work for *both* arches `release`'s loop builds - passing
+# arch-suffixed refs directly would silently bundle one arch's extension images into the
+# other arch's installer on whichever iteration doesn't match.
 #   make installer TARGET_ARCH=amd64 \
-#     KERNEL_IMAGE=docker.io/ffaxl/kernel:v1.13.8-awg-ce16310 \
-#     EXTENSIONS="docker.io/ffaxl/talos:extension-v1.13.8-awg-1422b3d-amd64 docker.io/ffaxl/talos:extension-v1.13.8-router-abc1234-amd64"
+#     KERNEL_IMAGE=ghcr.io/slipmesh/kernel:v0.1.0-talos1.13.8 \
+#     EXTENSIONS="ghcr.io/slipmesh/talos-awg-extension:v0.1.0-talos1.13.8 ghcr.io/slipmesh/talos-router-extension:v0.1.0-bird2.18"
 KERNEL_IMAGE ?=
 EXTENSIONS   ?=
 
@@ -68,7 +76,8 @@ print-config: ## Show the resolved arch and image names (KERNEL_IMAGE/EXTENSIONS
 	@echo "talos            : $(TALOS_VERSION)"
 	@echo "target arch      : $(TARGET_ARCH)"
 	@echo "kernel image     : $(KERNEL_IMAGE)"
-	@echo "extensions       : $(EXTENSIONS)"
+	@echo "extensions (base): $(EXTENSIONS)"
+	@for e in $(EXTENSIONS); do echo "  -> $${e}-$(TARGET_ARCH)"; done
 	@echo "installer image  : $(INSTALLER_IMAGE)"
 	@echo "manifest image   : $(MANIFEST_IMAGE)"
 
@@ -149,7 +158,7 @@ installer: checkout-talos | $(OUT_DIR) ## Bake an installer image from KERNEL_IM
 	  echo "    imageRef: $(INSTALLER_IMAGE)"; \
 	  echo "    ociPath: /out/base-oci"; \
 	  echo "  systemExtensions:"; \
-	  for e in $(EXTENSIONS); do echo "    - imageRef: $$e"; done; \
+	  for e in $(EXTENSIONS); do echo "    - imageRef: $${e}-$(TARGET_ARCH)"; done; \
 	  echo "output:"; \
 	  echo "  kind: installer"; \
 	  echo "  outFormat: raw"; \
