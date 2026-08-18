@@ -15,11 +15,11 @@ on:
   workflow_dispatch:
     inputs:
       kernel_image:
-        description: "Kernel image ref (../talos-kernel's published tag, e.g. ghcr.io/slipmesh/kernel:v1.13.8-awg-ce16310)"
+        description: "Kernel image ref (../talos-kernel's published tag, e.g. ghcr.io/slipmesh/kernel:v0.1.0-talos1.13.8)"
         required: true
         type: string
       extensions:
-        description: "Space-separated extension image refs to bundle"
+        description: "Space-separated extension image refs, arch-less (no -amd64/-arm64 suffix - Makefile appends it), e.g. ghcr.io/slipmesh/talos-router-extension:v0.1.0-bird2.18"
         required: true
         type: string
 

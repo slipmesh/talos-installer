@@ -26,18 +26,21 @@ ends up inside the final installer without needing a custom `imager` image.
 
 `KERNEL_IMAGE` and `EXTENSIONS` (space-separated image refs) are required, no defaults -
 a silently-wrong kernel or an accidentally-dropped extension is worse than a loud error
-demanding both every time:
+demanding both every time. `EXTENSIONS` entries are **arch-less base refs** - `installer`
+appends `-$(TARGET_ARCH)` itself (every extension repo publishes an arch-suffixed tag,
+never a multi-arch manifest, so the same `EXTENSIONS` string has to resolve correctly for
+both arches `release`'s loop builds - see the Makefile's own comment):
 
 ```sh
 make print-config TARGET_ARCH=amd64 \
   KERNEL_IMAGE=ghcr.io/slipmesh/kernel:v0.1.0-talos1.13.8 \
-  EXTENSIONS="ghcr.io/slipmesh/talos-awg-extension:v0.1.0-talos1.13.8-amd64 ghcr.io/slipmesh/talos-router-extension:v0.1.0-bird2.18-amd64"
+  EXTENSIONS="ghcr.io/slipmesh/talos-awg-extension:v0.1.0-talos1.13.8 ghcr.io/slipmesh/talos-router-extension:v0.1.0-bird2.18"
 
 make preflight   # docker/buildx/git/jq present, KERNEL_IMAGE/EXTENSIONS set
 
 make installer TARGET_ARCH=amd64 \
   KERNEL_IMAGE=ghcr.io/slipmesh/kernel:v0.1.0-talos1.13.8 \
-  EXTENSIONS="ghcr.io/slipmesh/talos-awg-extension:v0.1.0-talos1.13.8-amd64 ghcr.io/slipmesh/talos-router-extension:v0.1.0-bird2.18-amd64"
+  EXTENSIONS="ghcr.io/slipmesh/talos-awg-extension:v0.1.0-talos1.13.8 ghcr.io/slipmesh/talos-router-extension:v0.1.0-bird2.18"
 
 make push TARGET_ARCH=amd64
 ```
