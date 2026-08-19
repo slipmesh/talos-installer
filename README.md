@@ -33,14 +33,14 @@ both arches `release`'s loop builds - see the Makefile's own comment):
 
 ```sh
 make print-config TARGET_ARCH=amd64 \
-  KERNEL_IMAGE=ghcr.io/slipmesh/kernel:v0.1.0-talos1.13.8 \
-  EXTENSIONS="ghcr.io/slipmesh/talos-awg-extension:v0.1.0-talos1.13.8 ghcr.io/slipmesh/talos-router-extension:v0.1.0-bird2.18"
+  KERNEL_IMAGE=ghcr.io/slipmesh/kernel:v0.1.1-talos1.13.9 \
+  EXTENSIONS="ghcr.io/slipmesh/talos-awg-extension:v0.1.2-talos1.13.9 ghcr.io/slipmesh/talos-router-extension:v0.1.1-bird2.18"
 
 make preflight   # docker/buildx/git/jq present, KERNEL_IMAGE/EXTENSIONS set
 
 make installer TARGET_ARCH=amd64 \
-  KERNEL_IMAGE=ghcr.io/slipmesh/kernel:v0.1.0-talos1.13.8 \
-  EXTENSIONS="ghcr.io/slipmesh/talos-awg-extension:v0.1.0-talos1.13.8 ghcr.io/slipmesh/talos-router-extension:v0.1.0-bird2.18"
+  KERNEL_IMAGE=ghcr.io/slipmesh/kernel:v0.1.1-talos1.13.9 \
+  EXTENSIONS="ghcr.io/slipmesh/talos-awg-extension:v0.1.2-talos1.13.9 ghcr.io/slipmesh/talos-router-extension:v0.1.1-bird2.18"
 
 make push TARGET_ARCH=amd64
 ```
