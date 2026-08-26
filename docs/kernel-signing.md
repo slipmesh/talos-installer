@@ -51,10 +51,11 @@ artifact to track.
 ## The `--network=host` fix
 
 `local-kernel`/`local-initramfs` (not the bare `kernel`/`initramfs` shortcuts, which
-don't forward `TARGET_ARGS`) run with `TARGET_ARGS="--network=host"`. Without it,
-`siderolabs/talos`'s own Dockerfile `RUN` steps for a `TARGET_ARCH` different from the
-build host's own architecture (`go mod download`, in particular) hang indefinitely under
-plain Docker bridge networking when run through QEMU emulation: a plain
+don't forward `TARGET_ARGS`) run with `TARGET_ARGS="--network=host"`. This matters only
+for a local build of a foreign architecture - CI builds each arch on a runner of that
+architecture - but there it is required: `siderolabs/talos`'s own Dockerfile `RUN` steps
+(`go mod download`, in particular) hang indefinitely under plain Docker bridge networking
+when run through QEMU emulation. A plain
 `docker run --platform=linux/amd64 ... curl -4` to any address times out under the default
 bridge network on an arm64 host, and works instantly under `--network=host`.
 Nothing wrong with the module fetch itself — `--network=host` sidesteps whatever's broken

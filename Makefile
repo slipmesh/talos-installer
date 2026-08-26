@@ -127,11 +127,12 @@ endef
 # ever reaches a file).
 #
 # local-kernel/local-initramfs (not the bare kernel/initramfs shortcuts, which don't
-# forward TARGET_ARGS) with --network=host: siderolabs/talos's own Dockerfile RUN steps
-# for TARGET_ARCH != host arch (go mod download, in particular) hang indefinitely under
-# plain docker-bridge networking when run through QEMU emulation. Nothing is wrong with
-# the module fetch itself; --network=host sidesteps
-# whatever's broken in the emulated-container-to-bridge-NAT path entirely.
+# forward TARGET_ARGS) with --network=host. This only bites when TARGET_ARCH is not the
+# host's own arch, which in CI never happens - each arch builds on a runner of its own
+# architecture - but a local cross-arch build has no such option: siderolabs/talos's own
+# Dockerfile RUN steps (go mod download, in particular) then hang indefinitely under plain
+# docker-bridge networking through QEMU. Nothing is wrong with the module fetch itself;
+# --network=host sidesteps the emulated-container-to-bridge-NAT path entirely.
 .PHONY: installer
 installer: checkout-talos | $(OUT_DIR) ## Bake an installer image from KERNEL_IMAGE + EXTENSIONS (both required).
 	@[ -n "$(KERNEL_IMAGE)" ] || { echo "KERNEL_IMAGE not set"; exit 1; }

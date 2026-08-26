@@ -4,11 +4,14 @@
 # rebuild automatically. Run from the Actions tab (or `gh workflow run release.yml -f ...`) with
 # the exact refs you want bundled.
 #
-# `make release` itself loops over both ARCHS (amd64, arm64) and then runs push-manifest - one
-# job covers everything, unlike router/nftables/awg-extension's per-arch matrix, because the
-# Makefile's own release target already does that looping. Building the arm64 base installer and
-# kernel/initramfs export on an amd64 runner needs QEMU (docker buildx --platform=linux/arm64
-# during `export-to-oci`/`local-kernel`/`local-initramfs`).
+# One job per arch, each on a runner of that architecture (ubuntu-24.04-arm for arm64, free for
+# public repositories), then a merge job that combines the two into the multi-arch tag nodes
+# actually pull. Nothing is emulated: the base-installer export and the kernel/initramfs export
+# are plain buildx builds of the *native* platform on each runner.
+#
+# The Makefile's own `make release` still loops over both ARCHS for a single machine, where
+# emulating the foreign arch is the only option. CI does not use it - it calls `installer push`
+# per arch and `push-manifest` once, which is what that loop expands to anyway.
 name: Release installer image
 
 on:
@@ -28,8 +31,17 @@ permissions:
   packages: write
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
@@ -39,7 +51,6 @@ jobs:
           tool-cache: false
           docker-images: false
 
-      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -48,8 +59,47 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push installer (both arches + multi-arch manifest)
+      - name: Build and push this arch's installer
         run: |
-          make release \
+          make installer push TARGET_ARCH=${{ matrix.arch }} \
             KERNEL_IMAGE="${{ inputs.kernel_image }}" \
             EXTENSIONS="${{ inputs.extensions }}"
+
+      # push-manifest resolves the per-arch tags by reading these back, rather than recomputing
+      # BUILD_SLUG - see the Makefile's own comment on why recomputing is a footgun. They are the
+      # only thing the merge job needs from this one.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-refs-${{ matrix.arch }}
+          path: build/out-${{ matrix.arch }}/*-image.txt
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Restore each arch's image refs where push-manifest looks for them
+        uses: actions/download-artifact@v4
+        with:
+          path: build
+          pattern: image-refs-*
+
+      - name: Lay the artifacts out as build/out-<arch>/
+        run: |
+          for a in amd64 arm64; do
+            mkdir -p "build/out-$a"
+            mv build/image-refs-$a/*-image.txt "build/out-$a/"
+          done
+          cat build/out-*/installer-image.txt
+
+      - name: Combine both arches into the multi-arch tag nodes pull
+        run: make push-manifest
