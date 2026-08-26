@@ -129,8 +129,8 @@ endef
 # local-kernel/local-initramfs (not the bare kernel/initramfs shortcuts, which don't
 # forward TARGET_ARGS) with --network=host: siderolabs/talos's own Dockerfile RUN steps
 # for TARGET_ARCH != host arch (go mod download, in particular) hang indefinitely under
-# plain docker-bridge networking when run through QEMU emulation - confirmed directly on a
-# real host. Not something wrong with the module fetch itself; --network=host sidesteps
+# plain docker-bridge networking when run through QEMU emulation. Nothing is wrong with
+# the module fetch itself; --network=host sidesteps
 # whatever's broken in the emulated-container-to-bridge-NAT path entirely.
 .PHONY: installer
 installer: checkout-talos | $(OUT_DIR) ## Bake an installer image from KERNEL_IMAGE + EXTENSIONS (both required).
@@ -183,9 +183,9 @@ installer: checkout-talos | $(OUT_DIR) ## Bake an installer image from KERNEL_IM
 # recomputing BUILD_SLUG from KERNEL_IMAGE/EXTENSIONS - those aren't required again here
 # on purpose. Recomputing was tried first and is a real footgun: BUILD_SLUG silently
 # resolves to a *different* tag than the one actually built the moment KERNEL_IMAGE/
-# EXTENSIONS aren't passed identically to every target in the same invocation (confirmed
-# directly - `make installer KERNEL_IMAGE=... EXTENSIONS=...` followed by a bare `make
-# push` tried to push a tag that was never built).
+# EXTENSIONS aren't passed identically to every target in the same invocation: `make
+# installer KERNEL_IMAGE=... EXTENSIONS=...` followed by a bare `make push` pushes a tag
+# that was never built.
 .PHONY: push
 push: ## Push this arch's installer (intermediate - see push-manifest for what nodes pull).
 	@[ -f $(OUT_DIR)/installer-image.txt ] || { echo "no build/out-$(TARGET_ARCH)/installer-image.txt - run 'make installer' first (same invocation or a prior one)"; exit 1; }
