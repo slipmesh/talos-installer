@@ -47,8 +47,8 @@ TALOS_DIR := $(BUILD_DIR)/talos
 OUT_DIR   := $(BUILD_DIR)/out-$(TARGET_ARCH)
 
 # A build-specific slug folded into the tag so re-pushing under a tag that's already been
-# used doesn't silently fail to reach a node (confirmed directly, at both the extension
-# and the installer level). Derived from KERNEL_IMAGE + every EXTENSIONS entry so it
+# used doesn't silently fail to reach a node, at both the extension and the installer
+# level. Derived from KERNEL_IMAGE + every EXTENSIONS entry so it
 # changes whenever any input does, without needing this repo to know their internal pin
 # schemes.
 BUILD_SLUG      := $(shell echo -n "$(KERNEL_IMAGE) $(EXTENSIONS)" | sha256sum | cut -c1-12)
@@ -120,11 +120,11 @@ define export-to-oci
 endef
 
 # $(file ...) writes are expanded when make builds a recipe's command text, which happens
-# before ANY of the recipe's own lines actually run (confirmed directly) - so
-# profile.yaml is built as one shell block instead,
+# before ANY of the recipe's own lines actually run - so profile.yaml is built as one
+# shell block instead,
 # not a $(file) write, since the systemExtensions section needs a runtime loop over
 # EXTENSIONS (a make-level $(foreach) here collapses newlines to spaces before the text
-# ever reaches a file - also confirmed directly).
+# ever reaches a file).
 #
 # local-kernel/local-initramfs (not the bare kernel/initramfs shortcuts, which don't
 # forward TARGET_ARGS) with --network=host: siderolabs/talos's own Dockerfile RUN steps
@@ -165,11 +165,9 @@ installer: checkout-talos | $(OUT_DIR) ## Bake an installer image from KERNEL_IM
 	} > $(OUT_DIR)/profile.yaml
 	@echo "==> baking installer for $(TALOS_VERSION)/$(TARGET_ARCH)"
 	# No :z on this bind mount: on a host without SELinux, it doesn't just no-op the way :z
-	# suffixes usually do elsewhere - confirmed directly, this exact command with :z has
-	# the imager fail with "error opening OCI layout: stat /out/base-oci/index.json: no
-	# such file or directory" even though the file demonstrably exists and is readable via
-	# a plain (non-:z) bind mount of the same host path in a throwaway container run right
-	# after the failure. Dropping :z fixes it outright, no other change needed.
+	# suffixes usually do elsewhere - with :z the imager fails with "error opening OCI
+	# layout: stat /out/base-oci/index.json: no such file or directory" even though the
+	# file is present and readable through a plain bind mount of the same host path.
 	@docker run --rm -i --privileged --network host \
 	  -v $(PWD)/$(OUT_DIR):/out \
 	  -v $(PWD)/$(CUSTOM_KERNEL_DIR)/vmlinuz-$(TARGET_ARCH):/usr/install/$(TARGET_ARCH)/vmlinuz:ro \

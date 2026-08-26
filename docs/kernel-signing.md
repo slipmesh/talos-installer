@@ -54,9 +54,9 @@ artifact to track.
 don't forward `TARGET_ARGS`) run with `TARGET_ARGS="--network=host"`. Without it,
 `siderolabs/talos`'s own Dockerfile `RUN` steps for a `TARGET_ARCH` different from the
 build host's own architecture (`go mod download`, in particular) hang indefinitely under
-plain Docker bridge networking when run through QEMU emulation. Confirmed directly: a
-plain `docker run --platform=linux/amd64 ... curl -4` to any address timed out under the
-default bridge network on an arm64 host, and worked instantly under `--network=host`.
+plain Docker bridge networking when run through QEMU emulation: a plain
+`docker run --platform=linux/amd64 ... curl -4` to any address times out under the default
+bridge network on an arm64 host, and works instantly under `--network=host`.
 Nothing wrong with the module fetch itself — `--network=host` sidesteps whatever's broken
 in the emulated-container-to-bridge-NAT path entirely.
 
