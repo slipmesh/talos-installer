@@ -47,8 +47,8 @@ TALOS_DIR := $(BUILD_DIR)/talos
 OUT_DIR   := $(BUILD_DIR)/out-$(TARGET_ARCH)
 
 # A build-specific slug folded into the tag so re-pushing under a tag that's already been
-# used doesn't silently fail to reach a node (confirmed directly in ../talos-awg-extension
-# - see that repo's AGENTS.md). Derived from KERNEL_IMAGE + every EXTENSIONS entry so it
+# used doesn't silently fail to reach a node (confirmed directly, at both the extension
+# and the installer level). Derived from KERNEL_IMAGE + every EXTENSIONS entry so it
 # changes whenever any input does, without needing this repo to know their internal pin
 # schemes.
 BUILD_SLUG      := $(shell echo -n "$(KERNEL_IMAGE) $(EXTENSIONS)" | sha256sum | cut -c1-12)
@@ -120,8 +120,8 @@ define export-to-oci
 endef
 
 # $(file ...) writes are expanded when make builds a recipe's command text, which happens
-# before ANY of the recipe's own lines actually run (confirmed directly, see
-# ../talos-awg-extension/AGENTS.md) - so profile.yaml is built as one shell block instead,
+# before ANY of the recipe's own lines actually run (confirmed directly) - so
+# profile.yaml is built as one shell block instead,
 # not a $(file) write, since the systemExtensions section needs a runtime loop over
 # EXTENSIONS (a make-level $(foreach) here collapses newlines to spaces before the text
 # ever reaches a file - also confirmed directly).

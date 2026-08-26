@@ -10,13 +10,11 @@ Builds with **Docker** (`docker buildx`), on any machine, for any target archite
 
 ## This is one of five repos
 
-```
-talos-kernel                            -> signed kernel + amneziawg-pkg
-talos-awg-extension                     -> amneziawg system extension (pulls amneziawg-pkg)
-talos-router-extension                  -> router system extension (no kernel dependency)
-talos-nftables-extension                -> nftables system extension (no kernel dependency)
-talos-installer             (this repo) -> assembles kernel + N extensions into an installer
-```
+- [talos-kernel](https://github.com/slipmesh/talos-kernel) — signed kernel + `amneziawg-pkg`
+- [talos-awg-extension](https://github.com/slipmesh/talos-awg-extension) — amneziawg system extension (pulls `amneziawg-pkg`)
+- [talos-router-extension](https://github.com/slipmesh/talos-router-extension) — router system extension (no kernel dependency)
+- [talos-nftables-extension](https://github.com/slipmesh/talos-nftables-extension) — nftables system extension (no kernel dependency)
+- [talos-installer](https://github.com/slipmesh/talos-installer) — assembles a kernel + N extensions into an installer — **this repo**
 
 This repo consumes the other four's *published* images only, by tag - it never checks
 out or builds their source. See `docs/kernel-signing.md` for how a signed kernel actually
@@ -46,14 +44,14 @@ make push TARGET_ARCH=amd64
 ```
 
 Get the actual current tags from each extension repo's own `make extension` output (it
-prints the published ref) and from `../talos-kernel`'s `make kernel` output.
+prints the published ref) and from `talos-kernel`'s `make kernel` output.
 
 `installer`/`push` work on one `TARGET_ARCH` at a time and tag/publish
 `installer-<talos>-<build-slug>-<arch>`. `<build-slug>` is a short hash of
 `KERNEL_IMAGE`+`EXTENSIONS` (not a version you pick) — it exists purely so a rebuild with
 different inputs always gets a genuinely new tag; re-pushing under a tag that's already
 been used has been observed to *not* reliably reach a node on `talosctl upgrade`
-(confirmed directly, see `../talos-awg-extension/AGENTS.md`). The tag nodes actually pull
+(confirmed directly, at both the extension and the installer level). The tag nodes actually pull
 is the arch-less `installer-<talos>-<build-slug>`, a multi-arch manifest:
 
 ```sh
@@ -108,6 +106,6 @@ talosctl -n <node> get extensions                            # every extension y
 
 ## Bumping
 
-Bump `TALOS_VERSION` here to match whatever `../talos-kernel` and every extension repo
+Bump `TALOS_VERSION` here to match whatever `talos-kernel` and every extension repo
 were built against, then re-run `installer`/`release` with their current published tags.
 This repo has no other pins of its own.
