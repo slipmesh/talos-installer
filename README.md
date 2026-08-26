@@ -10,11 +10,16 @@ Builds with **Docker** (`docker buildx`), on any machine, for any target archite
 
 ## This is one of five repos
 
-- [talos-kernel](https://github.com/slipmesh/talos-kernel) — signed kernel + `amneziawg-pkg`
-- [talos-awg-extension](https://github.com/slipmesh/talos-awg-extension) — amneziawg system extension (pulls `amneziawg-pkg`)
-- [talos-router-extension](https://github.com/slipmesh/talos-router-extension) — router system extension (no kernel dependency)
-- [talos-nftables-extension](https://github.com/slipmesh/talos-nftables-extension) — nftables system extension (no kernel dependency)
-- [talos-installer](https://github.com/slipmesh/talos-installer) — assembles a kernel + N extensions into an installer — **this repo**
+- [talos-kernel](https://github.com/slipmesh/talos-kernel) —
+  signed kernel + `amneziawg-pkg`
+- [talos-awg-extension](https://github.com/slipmesh/talos-awg-extension) —
+  amneziawg system extension (pulls `amneziawg-pkg`)
+- [talos-router-extension](https://github.com/slipmesh/talos-router-extension) —
+  router system extension (no kernel dependency)
+- [talos-nftables-extension](https://github.com/slipmesh/talos-nftables-extension) —
+  nftables system extension (no kernel dependency)
+- [talos-installer](https://github.com/slipmesh/talos-installer) —
+  assembles a kernel + N extensions into an installer — **this repo**
 
 This repo consumes the other four's *published* images only, by tag - it never checks
 out or builds their source. See `docs/kernel-signing.md` for how a signed kernel actually
@@ -82,7 +87,7 @@ for its own `make local-kernel local-initramfs` recipe, not modified). `installe
 See `docs/kernel-signing.md` for the full detail and why this is both simpler and safer
 than building a custom `imager` image.
 
-```
+```text
 versions.env    TALOS_VERSION (must match what KERNEL_IMAGE/every extension were built
                 against), IMAGE (registry namespace for the published installer tag)
 docs/
