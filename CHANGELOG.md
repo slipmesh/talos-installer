@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### CI/CD ⚙️
+
+- Build each arch on a runner of its own architecture
+
+### Documentation 📚
+
+- Address the reader who cloned one repository, not five
+- State the facts, drop how they were found
+- State the facts, drop how they were found
+
+### Miscellaneous 🧹
+
+- Bump to Talos 1.13.9
+- Add the standard markdownlint config, fix what it found
+
 ## [0.1.0] - 2026-08-18
 
 ### Added ✨
