@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.1] - 2026-08-27
 
 ### CI/CD ⚙️
 
@@ -21,6 +21,7 @@ and follows [Semantic Versioning](https://semver.org/).
 
 - Bump to Talos 1.13.9
 - Add the standard markdownlint config, fix what it found
+- Move markdownlint config to the cli2 file
 
 ## [0.1.0] - 2026-08-18
 
