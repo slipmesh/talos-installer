@@ -76,7 +76,7 @@ talosctl -n <node> upgrade --image ghcr.io/slipmesh/talos-installer:installer-<t
 `checkout-talos` clones `siderolabs/talos` at the pinned `TALOS_VERSION` tag (used only
 for its own `make local-kernel local-initramfs` recipe, not modified). `installer`:
 
-1. Exports the stock `ghcr.io/siderolabs/installer:$(TALOS_VERSION)` to a local OCI
+1. Exports the stock `ghcr.io/siderolabs/installer-base:$(TALOS_VERSION)` to a local OCI
    layout (everything except kernel/initramfs comes from here — rootfs, sd-boot/sd-stub).
 2. Extracts a coherent `vmlinuz`+`initramfs.xz` pair from `KERNEL_IMAGE` via
    `siderolabs/talos`'s own `local-kernel`/`local-initramfs` targets.
