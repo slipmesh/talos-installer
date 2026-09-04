@@ -60,6 +60,12 @@ ARCHS           := amd64 arm64
 # coherently-signed kernel+initramfs into its output is a bind-mount at run time, not a
 # rebuild of the tool itself. See docs/kernel-signing.md.
 IMAGER            := ghcr.io/siderolabs/imager:$(TALOS_VERSION)
+# The rootfs, sd-boot and sd-stub come from here; the kernel and initramfs are bind-mounted
+# over imager's own, and the extensions come from EXTENSIONS, not from this image. It is
+# `installer-base`, not `installer`: siderolabs stopped publishing the latter with Talos
+# 1.14 (`installer:v1.14.0` is a 404), and installer-base is what upstream's own Makefile
+# hands imager as --base-installer-image, in 1.13 as well as 1.14.
+BASE_INSTALLER    := ghcr.io/siderolabs/installer-base:$(TALOS_VERSION)
 BASE_OCI_DIR      := $(OUT_DIR)/base-oci
 CUSTOM_KERNEL_DIR := $(OUT_DIR)/custom-kernel
 
@@ -74,6 +80,7 @@ help: ## Show this help.
 .PHONY: print-config
 print-config: ## Show the resolved arch and image names (KERNEL_IMAGE/EXTENSIONS as given).
 	@echo "talos            : $(TALOS_VERSION)"
+	@echo "base installer   : $(BASE_INSTALLER)"
 	@echo "target arch      : $(TARGET_ARCH)"
 	@echo "kernel image     : $(KERNEL_IMAGE)"
 	@echo "extensions (base): $(EXTENSIONS)"
@@ -138,8 +145,8 @@ installer: checkout-talos | $(OUT_DIR) ## Bake an installer image from KERNEL_IM
 	@[ -n "$(KERNEL_IMAGE)" ] || { echo "KERNEL_IMAGE not set"; exit 1; }
 	@[ -n "$(EXTENSIONS)" ] || { echo "EXTENSIONS not set"; exit 1; }
 	@echo "==> exporting base installer to OCI layout"
-	@docker pull -q --platform linux/$(TARGET_ARCH) ghcr.io/siderolabs/installer:$(TALOS_VERSION) >/dev/null
-	@$(call export-to-oci,ghcr.io/siderolabs/installer:$(TALOS_VERSION),$(BASE_OCI_DIR))
+	@docker pull -q --platform linux/$(TARGET_ARCH) $(BASE_INSTALLER) >/dev/null
+	@$(call export-to-oci,$(BASE_INSTALLER),$(BASE_OCI_DIR))
 	@echo "==> extracting kernel+initramfs from $(KERNEL_IMAGE)"
 	@mkdir -p $(CUSTOM_KERNEL_DIR)
 	@$(MAKE) -C $(TALOS_DIR) local-kernel local-initramfs \
