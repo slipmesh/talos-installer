@@ -60,7 +60,8 @@ ARCHS           := amd64 arm64
 # coherently-signed kernel+initramfs into its output is a bind-mount at run time, not a
 # rebuild of the tool itself. See docs/kernel-signing.md.
 IMAGER            := ghcr.io/siderolabs/imager:$(TALOS_VERSION)
-# Everything but kernel and initramfs comes from here - rootfs, sd-boot, sd-stub. It is
+# The rootfs, sd-boot and sd-stub come from here; the kernel and initramfs are bind-mounted
+# over imager's own, and the extensions come from EXTENSIONS, not from this image. It is
 # `installer-base`, not `installer`: siderolabs stopped publishing the latter with Talos
 # 1.14 (`installer:v1.14.0` is a 404), and installer-base is what upstream's own Makefile
 # hands imager as --base-installer-image, in 1.13 as well as 1.14.
