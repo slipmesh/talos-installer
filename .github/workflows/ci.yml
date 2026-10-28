@@ -74,7 +74,7 @@ jobs:
 
       # unsquashfs reads the Talos version out of the initramfs the installer is baked from.
       - name: Install squashfs-tools and zstd
-        run: sudo apt-get install -y --no-install-recommends squashfs-tools zstd
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends squashfs-tools zstd
 
       # Host networking lets the builder reach the job's registry on localhost.
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
