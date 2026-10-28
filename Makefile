@@ -111,6 +111,7 @@ check-pins: ## Assert the pins agree with KERNEL_RELEASE and its Talos release.
 	echo "PKGS matches Talos $(TALOS_VERSION): $$want"
 	@want=$$(curl -sS --fail "https://raw.githubusercontent.com/slipmesh/talos-kernel/$(subst +,%2B,$(KERNEL_RELEASE))/versions.env" \
 	  | sed -n 's/^AWG_REF=//p'); \
+	[ -n "$$want" ] || { echo "talos-kernel $(KERNEL_RELEASE)'s versions.env names no AWG_REF"; exit 1; }; \
 	if [ "$(AWG_REF)" != "$$want" ]; then \
 	  echo "MISMATCH: AWG_REF is $(AWG_REF), talos-kernel $(KERNEL_RELEASE) built $$want"; exit 1; \
 	fi; \
