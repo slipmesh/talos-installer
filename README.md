@@ -62,15 +62,11 @@ another registry under the same tags.
 
 ## CI and releases
 
-Every pull request and every push to `main` or a `release-*` branch builds the four extensions and
-the installer for both arches, each on a runner of its own arch, against a registry local to the
-job, unless it changes only Markdown, which is in no image. Other branches build through their pull
-request only. A push to `main` or a `release-*` branch then publishes the images to ghcr.io as
-`sha-<commit>` and merges the installer into a multi-arch
-`ghcr.io/slipmesh/talos-installer:sha-<commit>`.
-
-A release builds nothing: it retags the `sha-<commit>` installer of the commit it was cut from. See
-[RELEASING.md](docs/RELEASING.md). Then, per node:
+Pull requests and pushes check the pins and build nothing. Only the push of a merged release PR
+builds the four extensions and the installer for both arches, each on a runner of its own arch,
+against a registry local to the job, publishes them to ghcr.io as `sha-<commit>`, merges the
+installer into a multi-arch `ghcr.io/slipmesh/talos-installer:sha-<commit>`, then tags the commit
+and retags that installer as the release. See [RELEASING.md](docs/RELEASING.md). Then, per node:
 
 ```sh
 talosctl -n <node> upgrade --image ghcr.io/slipmesh/talos-installer:<release tag, + as ->
