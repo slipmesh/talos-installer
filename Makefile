@@ -1,16 +1,9 @@
-# Assembles a bootable Talos installer image from a signed kernel (../talos-kernel) and
-# any number of system extensions (../talos-awg-extension, ../talos-router-extension, or
-# anything else that publishes a Talos extension image) - the final "glue" step of a
-# split five-repo pipeline. See README, "This is one of five repos".
+# Builds the slipmesh Talos system extensions (amneziawg, awg, router, nftables) with
+# siderolabs/extensions' own bldr pipeline, then bakes them with talos-kernel's signed kernel into
+# a Talos installer image. See README.
 #
-# Deliberately generic: this repo has no source-level knowledge of awg/router/anything
-# else, only OCI image references passed in on the command line. Adding a fifth extension
-# later needs zero changes here.
-#
-# Needs Docker + `docker buildx`.
-#
-# build/ is disposable: `make distclean` drops it; the talos checkout is re-fetched as
-# needed.
+# Needs Docker with `docker buildx`: bldr is a BuildKit frontend that podman and buildah cannot
+# run. build/ is disposable; `make distclean` drops it and the checkouts are fetched again.
 
 include versions.env
 
@@ -20,51 +13,67 @@ SHELL := /bin/bash
 
 _GOALS := $(or $(MAKECMDGOALS),$(.DEFAULT_GOAL))
 ifeq ($(TARGET_ARCH),)
-  ifneq ($(filter-out release push-manifest distclean help checkout-talos,$(_GOALS)),)
-    $(error TARGET_ARCH not set - pass TARGET_ARCH=amd64 or TARGET_ARCH=arm64, or run `make release` to build both)
+  ifneq ($(filter-out help print-config check-pins hashes manifest clean distclean checkout-%,$(_GOALS)),)
+    $(error TARGET_ARCH not set - pass TARGET_ARCH=amd64 or TARGET_ARCH=arm64)
   endif
 endif
 
-# Required inputs for `installer`/`release` - no defaults on purpose, a silently-wrong
-# kernel or an accidentally-dropped extension is worse than a loud error demanding both
-# be named explicitly every time. See README, "Usage".
-#
-# EXTENSIONS entries are ARCH-LESS base refs (no trailing -amd64/-arm64) - `installer`
-# appends -$(TARGET_ARCH) itself when building each systemExtensions imageRef. This is
-# load-bearing, not cosmetic: every extension repo (router/nftables/awg-extension)
-# publishes its final tag with an arch suffix, never a multi-arch manifest, so a single
-# EXTENSIONS string has to work for *both* arches `release`'s loop builds - passing
-# arch-suffixed refs directly would silently bundle one arch's extension images into the
-# other arch's installer on whichever iteration doesn't match.
-#   make installer TARGET_ARCH=amd64 \
-#     KERNEL_IMAGE=ghcr.io/slipmesh/kernel:v0.1.0-talos1.13.8 \
-#     EXTENSIONS="ghcr.io/slipmesh/talos-awg-extension:v0.1.0-talos1.13.8 ghcr.io/slipmesh/talos-router-extension:v0.1.0-bird2.18"
-KERNEL_IMAGE ?=
-EXTENSIONS   ?=
+# --- derived pins -------------------------------------------------------------------
+TALOS_VERSION           := v$(lastword $(subst +talos, ,$(KERNEL_RELEASE)))
+UPSTREAM_EXTENSIONS_REF := $(TALOS_VERSION)
+KERNEL_TAG              := $(subst +,-,$(KERNEL_RELEASE))
+KERNEL_IMAGE            := ghcr.io/slipmesh/kernel:$(KERNEL_TAG)
+AMNEZIAWG_PKG           := ghcr.io/slipmesh/amneziawg-pkg:$(KERNEL_TAG)
 
-BUILD_DIR := build
-TALOS_DIR := $(BUILD_DIR)/talos
-OUT_DIR   := $(BUILD_DIR)/out-$(TARGET_ARCH)
+# PKGS is a `git describe` string; `git checkout` needs the object id from its tail.
+# Abbreviated, so it resolves locally but is never fetchable - see checkout-pkgs.
+PKGS_COMMIT := $(lastword $(subst -g, ,$(PKGS)))
 
-# A build-specific slug folded into the tag so re-pushing under a tag that's already been
-# used doesn't silently fail to reach a node, at both the extension and the installer
-# level. Derived from KERNEL_IMAGE + every EXTENSIONS entry so it
-# changes whenever any input does, without needing this repo to know their internal pin
-# schemes.
-BUILD_SLUG      := $(shell echo -n "$(KERNEL_IMAGE) $(EXTENSIONS)" | sha256sum | cut -c1-12)
-INSTALLER_IMAGE := $(IMAGE):installer-$(TALOS_VERSION)-$(BUILD_SLUG)-$(TARGET_ARCH)
-MANIFEST_IMAGE  := $(IMAGE):installer-$(TALOS_VERSION)-$(BUILD_SLUG)
-ARCHS           := amd64 arm64
+BIRD_VERSION   := $(patsubst v%,%,$(BIRD_REV))
+DAEMONS_DIGEST := $(lastword $(subst @sha256:, ,$(DAEMONS_IMAGE)))
 
-# The imager *tool* stays the stock siderolabs one - unmodified, never rebuilt. Getting a
-# coherently-signed kernel+initramfs into its output is a bind-mount at run time, not a
-# rebuild of the tool itself. See docs/kernel-signing.md.
+# --- what this build publishes ------------------------------------------------------
+# Every image is tagged with the commit it was built from, so a new build never reuses a tag a
+# node may already have pulled.
+TAG ?= sha-$(shell git rev-parse HEAD 2>/dev/null)
+
+EXTENSIONS         := amneziawg awg router nftables
+EXTENSION_IMAGES   := $(foreach e,$(EXTENSIONS),$(REGISTRY)/$(e):$(TAG)-$(TARGET_ARCH))
+NFTABLES_PKG_IMAGE := $(REGISTRY)/nftables-pkg:$(TAG)-$(TARGET_ARCH)
+INSTALLER_IMAGE    := $(REGISTRY)/talos-installer:$(TAG)-$(TARGET_ARCH)
+MANIFEST_IMAGE     := $(REGISTRY)/talos-installer:$(TAG)
+ARCHS              := amd64 arm64
+
+# extensions-validator accepts only a few version shapes: `<semver>-v<talos>`, as zfs upstream
+# uses, and `<hex>-v<talos>[-<suffix>]`, whose hex here is the daemons image digest.
+DAEMONS_SHORT     := $(shell printf '%.12s' '$(DAEMONS_DIGEST)')
+VERSION_amneziawg := $(patsubst v%,%,$(AWG_REF))-$(TALOS_VERSION)
+VERSION_awg       := $(DAEMONS_SHORT)-$(TALOS_VERSION)
+VERSION_router    := $(DAEMONS_SHORT)-$(TALOS_VERSION)-bird$(BIRD_VERSION)
+VERSION_nftables  := $(DAEMONS_SHORT)-$(TALOS_VERSION)-nft$(NFTABLES_VERSION)
+
+# bldr renders every pkg.yaml in the tree whichever target it builds, so each build gets them all.
+EXTENSION_ARGS := --build-arg=AMNEZIAWG_PKG=$(AMNEZIAWG_PKG) --build-arg=DAEMONS=$(DAEMONS_IMAGE) \
+                  --build-arg=NFTABLES_PKG=$(NFTABLES_PKG_IMAGE) --build-arg=BIRD_REV=$(BIRD_REV) \
+                  --build-arg=BIRD_COMMIT=$(BIRD_COMMIT) --build-arg=BIRD_EXPORTER_REV=$(BIRD_EXPORTER_REV)
+
+NFTABLES_PKG_ARGS := \
+  --build-arg=LIBMNL_VERSION=$(LIBMNL_VERSION) --build-arg=LIBMNL_SHA256=$(LIBMNL_SHA256) --build-arg=LIBMNL_SHA512=$(LIBMNL_SHA512) \
+  --build-arg=LIBNFTNL_VERSION=$(LIBNFTNL_VERSION) --build-arg=LIBNFTNL_SHA256=$(LIBNFTNL_SHA256) --build-arg=LIBNFTNL_SHA512=$(LIBNFTNL_SHA512) \
+  --build-arg=NFTABLES_VERSION=$(NFTABLES_VERSION) --build-arg=NFTABLES_SHA256=$(NFTABLES_SHA256) --build-arg=NFTABLES_SHA512=$(NFTABLES_SHA512) \
+  --build-arg=MUSL_VERSION=$(MUSL_VERSION) --build-arg=MUSL_SHA256=$(MUSL_SHA256) --build-arg=MUSL_SHA512=$(MUSL_SHA512)
+
+BUILD_DIR      := build
+TALOS_DIR      := $(BUILD_DIR)/talos
+PKGS_DIR       := $(BUILD_DIR)/pkgs
+EXTENSIONS_DIR := $(BUILD_DIR)/extensions
+OUT_DIR        := $(BUILD_DIR)/out-$(TARGET_ARCH)
+
+# The imager tool stays the stock siderolabs one; the signed kernel and initramfs are bind-mounted
+# over its own at run time (docs/kernel-signing.md). The rootfs, sd-boot and sd-stub come from
+# `installer-base`: siderolabs stopped publishing `installer` with Talos 1.14, and installer-base is
+# what upstream's own Makefile hands imager as --base-installer-image.
 IMAGER            := ghcr.io/siderolabs/imager:$(TALOS_VERSION)
-# The rootfs, sd-boot and sd-stub come from here; the kernel and initramfs are bind-mounted
-# over imager's own, and the extensions come from EXTENSIONS, not from this image. It is
-# `installer-base`, not `installer`: siderolabs stopped publishing the latter with Talos
-# 1.14 (`installer:v1.14.0` is a 404), and installer-base is what upstream's own Makefile
-# hands imager as --base-installer-image, in 1.13 as well as 1.14.
 BASE_INSTALLER    := ghcr.io/siderolabs/installer-base:$(TALOS_VERSION)
 BASE_OCI_DIR      := $(OUT_DIR)/base-oci
 CUSTOM_KERNEL_DIR := $(OUT_DIR)/custom-kernel
@@ -74,83 +83,121 @@ CUSTOM_KERNEL_DIR := $(OUT_DIR)/custom-kernel
 .PHONY: help
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} \
-	/^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-13s\033[0m %s\n", $$1, $$2 } \
+	/^[a-zA-Z_%-]+:.*?##/ { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 } \
 	/^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) }' $(MAKEFILE_LIST)
 
 .PHONY: print-config
-print-config: ## Show the resolved arch and image names (KERNEL_IMAGE/EXTENSIONS as given).
-	@echo "talos            : $(TALOS_VERSION)"
-	@echo "base installer   : $(BASE_INSTALLER)"
+print-config: ## Show the resolved pins and image names.
+	@echo "talos            : $(TALOS_VERSION) (from kernel release $(KERNEL_RELEASE))"
+	@echo "kernel           : $(KERNEL_IMAGE)"
+	@echo "amneziawg-pkg    : $(AMNEZIAWG_PKG) (awg $(AWG_REF))"
+	@echo "daemons          : $(DAEMONS_IMAGE)"
+	@echo "pkgs             : $(PKGS) (commit $(PKGS_COMMIT))"
+	@echo "extensions ref   : $(UPSTREAM_EXTENSIONS_REF)"
+	@echo "bird             : $(BIRD_VERSION), bird_exporter $(BIRD_EXPORTER_REV)"
+	@echo "nftables         : $(NFTABLES_VERSION) (libnftnl $(LIBNFTNL_VERSION), libmnl $(LIBMNL_VERSION))"
 	@echo "target arch      : $(TARGET_ARCH)"
-	@echo "kernel image     : $(KERNEL_IMAGE)"
-	@echo "extensions (base): $(EXTENSIONS)"
-	@for e in $(EXTENSIONS); do echo "  -> $${e}-$(TARGET_ARCH)"; done
-	@echo "installer image  : $(INSTALLER_IMAGE)"
-	@echo "manifest image   : $(MANIFEST_IMAGE)"
+	@$(foreach e,$(EXTENSIONS),printf '%-17s: %s (%s)\n' '$(e)' '$(REGISTRY)/$(e):$(TAG)-$(TARGET_ARCH)' '$(VERSION_$(e))';)
+	@echo "nftables-pkg     : $(NFTABLES_PKG_IMAGE)"
+	@echo "installer        : $(INSTALLER_IMAGE)"
+	@echo "manifest         : $(MANIFEST_IMAGE)"
+
+.PHONY: check-pins
+check-pins: ## Assert the pins agree with KERNEL_RELEASE and its Talos release.
+	@want=$$(curl -sS --fail "https://raw.githubusercontent.com/siderolabs/talos/$(TALOS_VERSION)/pkg/machinery/gendata/data/pkgs"); \
+	if [ "$(PKGS)" != "$$want" ]; then \
+	  echo "MISMATCH: PKGS is $(PKGS), Talos $(TALOS_VERSION) was built from pkgs $$want"; exit 1; \
+	fi; \
+	echo "PKGS matches Talos $(TALOS_VERSION): $$want"
+	@want=$$(curl -sS --fail "https://raw.githubusercontent.com/slipmesh/talos-kernel/$(subst +,%2B,$(KERNEL_RELEASE))/versions.env" \
+	  | sed -n 's/^AWG_REF=//p'); \
+	[ -n "$$want" ] || { echo "talos-kernel $(KERNEL_RELEASE)'s versions.env names no AWG_REF"; exit 1; }; \
+	if [ "$(AWG_REF)" != "$$want" ]; then \
+	  echo "MISMATCH: AWG_REF is $(AWG_REF), talos-kernel $(KERNEL_RELEASE) built $$want"; exit 1; \
+	fi; \
+	echo "AWG_REF matches talos-kernel $(KERNEL_RELEASE): $$want"
+	@[[ "$(DAEMONS_IMAGE)" =~ @sha256:[0-9a-f]{64}$$ ]] \
+	  || { echo "DAEMONS_IMAGE must be pinned by digest: $(DAEMONS_IMAGE)"; exit 1; }
+	@echo "DAEMONS_IMAGE pinned by digest"
 
 .PHONY: preflight
 preflight: ## Check this machine can run the build.
 	@fail=0; \
-	for t in docker git jq; do command -v $$t >/dev/null || { echo "MISSING: $$t"; fail=1; }; done; \
+	for t in docker git jq curl; do command -v $$t >/dev/null || { echo "MISSING: $$t"; fail=1; }; done; \
 	docker buildx version >/dev/null 2>&1 || { echo "MISSING: docker buildx"; fail=1; }; \
-	docker version >/dev/null 2>&1 || { echo "docker daemon not reachable (permission denied or not running)"; fail=1; }; \
-	[ -n "$(KERNEL_IMAGE)" ] || { echo "MISSING: KERNEL_IMAGE not set"; fail=1; }; \
-	[ -n "$(EXTENSIONS)" ] || { echo "MISSING: EXTENSIONS not set (space-separated image refs)"; fail=1; }; \
-	echo "host $$(uname -m)"; \
+	docker version >/dev/null 2>&1 || { echo "docker daemon not reachable"; fail=1; }; \
 	[ $$fail -eq 0 ] && echo "preflight OK" || exit 1
 
-##@ Build
+##@ Checkouts
 
 $(BUILD_DIR) $(OUT_DIR):
 	@mkdir -p $@
 
+.PHONY: checkout-pkgs
+checkout-pkgs: | $(BUILD_DIR) ## Fetch siderolabs/pkgs at PKGS and overlay pkgs/.
+	@if [ ! -d "$(PKGS_DIR)/.git" ]; then \
+	  git clone --filter=blob:none --quiet https://github.com/siderolabs/pkgs.git $(PKGS_DIR); \
+	fi
+	@git -C $(PKGS_DIR) rev-parse --verify --quiet '$(PKGS_COMMIT)^{commit}' >/dev/null \
+	  || git -C $(PKGS_DIR) fetch --quiet --filter=blob:none --tags origin
+	@full=$$(git -C $(PKGS_DIR) rev-parse --verify '$(PKGS_COMMIT)^{commit}'); \
+	  git -C $(PKGS_DIR) checkout --quiet --force --detach "$$full"
+	@git -C $(PKGS_DIR) clean --quiet -fd
+	@cp -r pkgs/*/ $(PKGS_DIR)/
+
+.PHONY: checkout-extensions
+checkout-extensions: | $(BUILD_DIR) ## Fetch siderolabs/extensions at the Talos release and overlay extensions/.
+	@if [ ! -d "$(EXTENSIONS_DIR)/.git" ]; then \
+	  git clone --filter=blob:none --quiet https://github.com/siderolabs/extensions.git $(EXTENSIONS_DIR); \
+	fi
+	@git -C $(EXTENSIONS_DIR) fetch --quiet --filter=blob:none origin tag $(UPSTREAM_EXTENSIONS_REF)
+	@git -C $(EXTENSIONS_DIR) checkout --quiet --force --detach $(UPSTREAM_EXTENSIONS_REF)
+	@git -C $(EXTENSIONS_DIR) clean --quiet -fd
+	@cp -r extensions/*/ $(EXTENSIONS_DIR)/
+
 .PHONY: checkout-talos
-checkout-talos: | $(BUILD_DIR) ## Fetch siderolabs/talos at $(TALOS_VERSION) - used only to extract a kernel+initramfs pair built against KERNEL_IMAGE.
+checkout-talos: | $(BUILD_DIR) ## Fetch siderolabs/talos at the Talos release, for its kernel+initramfs recipe.
 	@if [ ! -d "$(TALOS_DIR)/.git" ]; then \
-	  echo "==> cloning siderolabs/talos"; \
 	  git clone --filter=blob:none --quiet https://github.com/siderolabs/talos.git $(TALOS_DIR); \
 	fi
-	@git -C $(TALOS_DIR) fetch --quiet --filter=blob:none origin $(TALOS_VERSION) 2>/dev/null || git -C $(TALOS_DIR) fetch --quiet origin
+	@git -C $(TALOS_DIR) fetch --quiet --filter=blob:none origin tag $(TALOS_VERSION)
 	@git -C $(TALOS_DIR) checkout --quiet --force --detach $(TALOS_VERSION)
 
-# Exports a registry image to a plain OCI-layout directory and stamps a platform onto its
-# index - via `docker buildx build --output=type=oci`, the one docker-native way to get a
-# real OCI layout (index.json + blobs/) onto disk. $(1) = source image, $(2) = dest dir.
-define export-to-oci
-	rm -rf $(2); mkdir -p $(2); \
-	printf 'FROM %s\n' $(1) | docker buildx build --platform=linux/$(TARGET_ARCH) \
-	  --output=type=oci,dest=$(2)/image.tar -; \
-	tar -xf $(2)/image.tar -C $(2); rm -f $(2)/image.tar; \
-	tmp=$$(mktemp); \
-	jq '.manifests[0].platform = {architecture:"$(TARGET_ARCH)", os:"linux"}' \
-	  $(2)/index.json >"$$tmp" && mv "$$tmp" $(2)/index.json
-endef
+##@ Build (one arch)
 
-# $(file ...) writes are expanded when make builds a recipe's command text, which happens
-# before ANY of the recipe's own lines actually run - so profile.yaml is built as one
-# shell block instead,
-# not a $(file) write, since the systemExtensions section needs a runtime loop over
-# EXTENSIONS (a make-level $(foreach) here collapses newlines to spaces before the text
-# ever reaches a file).
-#
-# local-kernel/local-initramfs (not the bare kernel/initramfs shortcuts, which don't
-# forward TARGET_ARGS) with --network=host. This only bites when TARGET_ARCH is not the
-# host's own arch, which in CI never happens - each arch builds on a runner of its own
-# architecture - but a local cross-arch build has no such option: siderolabs/talos's own
-# Dockerfile RUN steps (go mod download, in particular) then hang indefinitely under plain
-# docker-bridge networking through QEMU. Nothing is wrong with the module fetch itself;
-# --network=host sidesteps the emulated-container-to-bridge-NAT path entirely.
+.PHONY: nftables-pkg
+nftables-pkg: checkout-pkgs ## Build the static nft and push it to REGISTRY.
+	@echo "==> building $(NFTABLES_PKG_IMAGE)"
+	@$(MAKE) -C $(PKGS_DIR) docker-nftables-pkg PLATFORM=linux/$(TARGET_ARCH) \
+	  TARGET_ARGS="--tag=$(NFTABLES_PKG_IMAGE) --push=true $(NFTABLES_PKG_ARGS)"
+
+extension-%: checkout-extensions ## Build and push one extension: extension-amneziawg, -awg, -router, -nftables.
+	@echo "==> building $(REGISTRY)/$*:$(TAG)-$(TARGET_ARCH) ($(VERSION_$*))"
+	@$(MAKE) -C $(EXTENSIONS_DIR) docker-$* PLATFORM=linux/$(TARGET_ARCH) \
+	  TARGET_ARGS="--tag=$(REGISTRY)/$*:$(TAG)-$(TARGET_ARCH) --push=true $(EXTENSION_ARGS) --build-arg=VERSION=$(VERSION_$*)"
+
+extension-nftables: nftables-pkg
+
+.PHONY: extensions
+extensions: $(addprefix extension-,$(EXTENSIONS)) ## Build and push all four extensions.
+
+# local-kernel/local-initramfs rather than the bare kernel/initramfs targets, which do not forward
+# TARGET_ARGS. --network=host only matters for a build of a foreign arch: talos' own Dockerfile
+# steps hang on `go mod download` under QEMU behind docker's bridge network.
 .PHONY: installer
-installer: checkout-talos | $(OUT_DIR) ## Bake an installer image from KERNEL_IMAGE + EXTENSIONS (both required).
-	@[ -n "$(KERNEL_IMAGE)" ] || { echo "KERNEL_IMAGE not set"; exit 1; }
-	@[ -n "$(EXTENSIONS)" ] || { echo "EXTENSIONS not set"; exit 1; }
-	@echo "==> exporting base installer to OCI layout"
+installer: checkout-talos | $(OUT_DIR) ## Bake the installer from the kernel and the extensions pushed under TAG.
+	@echo "==> exporting $(BASE_INSTALLER) to an OCI layout"
 	@docker pull -q --platform linux/$(TARGET_ARCH) $(BASE_INSTALLER) >/dev/null
-	@$(call export-to-oci,$(BASE_INSTALLER),$(BASE_OCI_DIR))
-	@echo "==> extracting kernel+initramfs from $(KERNEL_IMAGE)"
+	@rm -rf $(BASE_OCI_DIR); mkdir -p $(BASE_OCI_DIR)
+	@printf 'FROM %s\n' $(BASE_INSTALLER) | docker buildx build --platform=linux/$(TARGET_ARCH) \
+	  --output=type=oci,dest=$(BASE_OCI_DIR)/image.tar -
+	@tar -xf $(BASE_OCI_DIR)/image.tar -C $(BASE_OCI_DIR) && rm -f $(BASE_OCI_DIR)/image.tar
+	@jq '.manifests[0].platform = {architecture:"$(TARGET_ARCH)", os:"linux"}' $(BASE_OCI_DIR)/index.json \
+	  > $(BASE_OCI_DIR)/index.json.tmp && mv $(BASE_OCI_DIR)/index.json.tmp $(BASE_OCI_DIR)/index.json
+	@echo "==> extracting kernel and initramfs from $(KERNEL_IMAGE)"
 	@mkdir -p $(CUSTOM_KERNEL_DIR)
 	@$(MAKE) -C $(TALOS_DIR) local-kernel local-initramfs \
-	  PKG_KERNEL=$(KERNEL_IMAGE) PLATFORM=linux/$(TARGET_ARCH) DEST=$(PWD)/$(CUSTOM_KERNEL_DIR) \
+	  PKG_KERNEL=$(KERNEL_IMAGE) PLATFORM=linux/$(TARGET_ARCH) DEST=$(CURDIR)/$(CUSTOM_KERNEL_DIR) \
 	  TARGET_ARGS="--network=host"
 	@{ \
 	  echo "arch: $(TARGET_ARCH)"; \
@@ -166,75 +213,63 @@ installer: checkout-talos | $(OUT_DIR) ## Bake an installer image from KERNEL_IM
 	  echo "    imageRef: $(INSTALLER_IMAGE)"; \
 	  echo "    ociPath: /out/base-oci"; \
 	  echo "  systemExtensions:"; \
-	  for e in $(EXTENSIONS); do echo "    - imageRef: $${e}-$(TARGET_ARCH)"; done; \
+	  for e in $(EXTENSION_IMAGES); do echo "    - imageRef: $$e"; done; \
 	  echo "output:"; \
 	  echo "  kind: installer"; \
 	  echo "  outFormat: raw"; \
 	} > $(OUT_DIR)/profile.yaml
-	@echo "==> baking installer for $(TALOS_VERSION)/$(TARGET_ARCH)"
-	# No :z on this bind mount: on a host without SELinux, it doesn't just no-op the way :z
-	# suffixes usually do elsewhere - with :z the imager fails with "error opening OCI
-	# layout: stat /out/base-oci/index.json: no such file or directory" even though the
-	# file is present and readable through a plain bind mount of the same host path.
+	@echo "==> baking $(INSTALLER_IMAGE)"
+	# No :z on this bind mount: on a host without SELinux the imager then fails with "error opening
+	# OCI layout: stat /out/base-oci/index.json: no such file or directory".
 	@docker run --rm -i --privileged --network host \
-	  -v $(PWD)/$(OUT_DIR):/out \
-	  -v $(PWD)/$(CUSTOM_KERNEL_DIR)/vmlinuz-$(TARGET_ARCH):/usr/install/$(TARGET_ARCH)/vmlinuz:ro \
-	  -v $(PWD)/$(CUSTOM_KERNEL_DIR)/initramfs-$(TARGET_ARCH).xz:/usr/install/$(TARGET_ARCH)/initramfs.xz:ro \
+	  -v $(CURDIR)/$(OUT_DIR):/out \
+	  -v $(CURDIR)/$(CUSTOM_KERNEL_DIR)/vmlinuz-$(TARGET_ARCH):/usr/install/$(TARGET_ARCH)/vmlinuz:ro \
+	  -v $(CURDIR)/$(CUSTOM_KERNEL_DIR)/initramfs-$(TARGET_ARCH).xz:/usr/install/$(TARGET_ARCH)/initramfs.xz:ro \
 	  -v /dev:/dev $(IMAGER) - --insecure \
 	  < $(OUT_DIR)/profile.yaml
 	@docker load -q -i $(OUT_DIR)/installer-$(TARGET_ARCH).tar >/dev/null
 	@docker image inspect $(INSTALLER_IMAGE) --format 'built $(INSTALLER_IMAGE) arch={{.Architecture}} size={{.Size}}'
-	@echo -n "$(INSTALLER_IMAGE)" > $(OUT_DIR)/installer-image.txt
-	@echo -n "$(MANIFEST_IMAGE)" > $(OUT_DIR)/manifest-image.txt
 
-# push/push-manifest read the tag back from what `installer` wrote instead of
-# recomputing BUILD_SLUG from KERNEL_IMAGE/EXTENSIONS - those aren't required again here
-# on purpose. Recomputing was tried first and is a real footgun: BUILD_SLUG silently
-# resolves to a *different* tag than the one actually built the moment KERNEL_IMAGE/
-# EXTENSIONS aren't passed identically to every target in the same invocation: `make
-# installer KERNEL_IMAGE=... EXTENSIONS=...` followed by a bare `make push` pushes a tag
-# that was never built.
 .PHONY: push
-push: ## Push this arch's installer (intermediate - see push-manifest for what nodes pull).
-	@[ -f $(OUT_DIR)/installer-image.txt ] || { echo "no build/out-$(TARGET_ARCH)/installer-image.txt - run 'make installer' first (same invocation or a prior one)"; exit 1; }
-	@img=$$(cat $(OUT_DIR)/installer-image.txt); \
-	docker push "$$img"; \
-	echo "pushed $$img - run push-manifest once every arch you need is pushed"
+push: ## Push this arch's installer to REGISTRY.
+	@docker push -q $(INSTALLER_IMAGE)
 
-.PHONY: push-manifest
-push-manifest: ## Combine the per-arch installers already in the registry into one multi-arch tag.
-	@manifest=""; \
-	imgs=""; \
-	for a in $(ARCHS); do \
-	  f=$(BUILD_DIR)/out-$$a/installer-image.txt; \
-	  [ -f "$$f" ] || { echo "missing $$f - run: make installer push TARGET_ARCH=$$a KERNEL_IMAGE=... EXTENSIONS=..."; exit 1; }; \
-	  img=$$(cat "$$f"); \
-	  docker image inspect "$$img" >/dev/null 2>&1 || docker pull -q "$$img" >/dev/null; \
-	  imgs="$$imgs $$img"; \
-	  manifest=$$(cat $(BUILD_DIR)/out-$$a/manifest-image.txt); \
-	done; \
-	docker manifest rm "$$manifest" >/dev/null 2>&1 || true; \
-	docker manifest create "$$manifest" $$imgs >/dev/null; \
-	docker manifest push "$$manifest"; \
-	echo; \
-	echo "pushed multi-arch $$manifest ($(ARCHS))"; \
-	echo "upgrade a node with:"; \
-	echo "  talosctl -n <node> upgrade --image $$manifest"
+##@ Publish
 
-.PHONY: release
-release: ## Build+push every arch and publish the multi-arch tag - the one command for a release.
-	@for a in $(ARCHS); do \
-	  echo "==> $$a"; \
-	  $(MAKE) --no-print-directory installer push TARGET_ARCH=$$a KERNEL_IMAGE="$(KERNEL_IMAGE)" EXTENSIONS="$(EXTENSIONS)"; \
+# The imager pulls the extensions from a container of its own, without the host's registry
+# credentials, so CI builds against a registry local to the job and copies the results out.
+.PHONY: publish
+publish: ## Copy this arch's extensions and installer from REGISTRY to PUBLISH_REGISTRY.
+	@[ -n "$(PUBLISH_REGISTRY)" ] || { echo "PUBLISH_REGISTRY not set"; exit 1; }
+	@for name in $(EXTENSIONS) talos-installer; do \
+	  src=$(REGISTRY)/$$name:$(TAG)-$(TARGET_ARCH); dst=$(PUBLISH_REGISTRY)/$$name:$(TAG)-$(TARGET_ARCH); \
+	  docker pull -q "$$src" >/dev/null; docker tag "$$src" "$$dst"; docker push -q "$$dst"; \
 	done
-	@$(MAKE) --no-print-directory push-manifest
+
+.PHONY: manifest
+manifest: ## Combine both arches' pushed installers into the multi-arch tag nodes pull.
+	@docker buildx imagetools create -t $(MANIFEST_IMAGE) $(foreach a,$(ARCHS),$(REGISTRY)/talos-installer:$(TAG)-$(a))
+	@echo "upgrade a node with: talosctl -n <node> upgrade --image $(MANIFEST_IMAGE)"
 
 ##@ Maintenance
 
+.PHONY: hashes
+hashes: ## Recompute the LIBMNL_/LIBNFTNL_/NFTABLES_/MUSL_ hashes for the current versions.
+	@for spec in "https://www.netfilter.org/projects/libmnl/files/libmnl-$(LIBMNL_VERSION).tar.bz2:LIBMNL" \
+	             "https://netfilter.org/projects/libnftnl/files/libnftnl-$(LIBNFTNL_VERSION).tar.xz:LIBNFTNL" \
+	             "https://netfilter.org/projects/nftables/files/nftables-$(NFTABLES_VERSION).tar.xz:NFTABLES" \
+	             "https://www.musl-libc.org/releases/musl-$(MUSL_VERSION).tar.gz:MUSL"; do \
+	  url=$${spec%:*}; var=$${spec##*:}; tmp=$$(mktemp); \
+	  curl -sSL --fail "$$url" -o "$$tmp"; \
+	  echo "$${var}_SHA256=$$(sha256sum "$$tmp" | cut -d' ' -f1)"; \
+	  echo "$${var}_SHA512=$$(sha512sum "$$tmp" | cut -d' ' -f1)"; \
+	  rm -f "$$tmp"; \
+	done
+
 .PHONY: clean
-clean: ## Drop build outputs, keep the pinned checkout.
-	@rm -rf $(OUT_DIR)
+clean: ## Drop this build's outputs, keep the checkouts.
+	@rm -rf $(BUILD_DIR)/out-*
 
 .PHONY: distclean
-distclean: ## Drop everything, including the pinned checkout.
+distclean: ## Drop everything, including the checkouts.
 	@rm -rf $(BUILD_DIR)

@@ -1,0 +1,12 @@
+version: v1alpha1
+metadata:
+  name: awg
+  version: "{{ .VERSION }}"
+  author: slipmesh
+  description: |
+    Talos extension service that configures mesh and road-warrior AmneziaWG interfaces from a
+    static ExtensionServiceConfig. Needs the amneziawg extension for the kernel module; see
+    docs/awg.md in talos-installer.
+  compatibility:
+    talos:
+      version: ">= v1.10.0"

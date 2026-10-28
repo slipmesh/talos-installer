@@ -1,0 +1,126 @@
+name: nftables-pkg
+variant: scratch
+shell: /bin/bash
+dependencies:
+  - stage: base
+steps:
+  - sources:
+      - url: https://www.netfilter.org/projects/libmnl/files/libmnl-{{ .BUILD_ARG_LIBMNL_VERSION }}.tar.bz2
+        destination: libmnl.tar.bz2
+        sha256: "{{ .BUILD_ARG_LIBMNL_SHA256 }}"
+        sha512: "{{ .BUILD_ARG_LIBMNL_SHA512 }}"
+      - url: https://netfilter.org/projects/libnftnl/files/libnftnl-{{ .BUILD_ARG_LIBNFTNL_VERSION }}.tar.xz
+        destination: libnftnl.tar.xz
+        sha256: "{{ .BUILD_ARG_LIBNFTNL_SHA256 }}"
+        sha512: "{{ .BUILD_ARG_LIBNFTNL_SHA512 }}"
+      - url: https://netfilter.org/projects/nftables/files/nftables-{{ .BUILD_ARG_NFTABLES_VERSION }}.tar.xz
+        destination: nftables.tar.xz
+        sha256: "{{ .BUILD_ARG_NFTABLES_SHA256 }}"
+        sha512: "{{ .BUILD_ARG_NFTABLES_SHA512 }}"
+      - url: https://www.musl-libc.org/releases/musl-{{ .BUILD_ARG_MUSL_VERSION }}.tar.gz
+        destination: musl.tar.gz
+        sha256: "{{ .BUILD_ARG_MUSL_SHA256 }}"
+        sha512: "{{ .BUILD_ARG_MUSL_SHA512 }}"
+    prepare:
+      - |
+        mkdir -p /src/libmnl
+        tar -xjf libmnl.tar.bz2 --strip-components=1 -C /src/libmnl
+      - |
+        mkdir -p /src/libnftnl
+        tar -xf libnftnl.tar.xz --strip-components=1 -C /src/libnftnl
+      - |
+        mkdir -p /src/nftables
+        tar -xf nftables.tar.xz --strip-components=1 -C /src/nftables
+      - |
+        mkdir -p /src/musl
+        tar -xzf musl.tar.gz --strip-components=1 -C /src/musl musl-{{ .BUILD_ARG_MUSL_VERSION }}/COPYRIGHT
+    # siderolabs/pkgs builds all three, but dynamically linked, and the nftables extension stages
+    # no shared libraries beside `nft`: it has to be fully static. libmnl and libnftnl are built
+    # only as static archives for it to link against and never reach /rootfs.
+    build:
+      - |
+        cd /src/libmnl
+        ./configure --prefix=/usr --disable-shared --enable-static
+        make -j $(nproc)
+        make install
+      - |
+        cd /src/libnftnl
+        export PKG_CONFIG_PATH=/usr/lib/pkgconfig
+        ./configure --prefix=/usr --disable-shared --enable-static
+        make -j $(nproc)
+        make install
+      - |
+        cd /src/nftables
+        export PKG_CONFIG_PATH=/usr/lib/pkgconfig
+        ./configure \
+          --prefix=/usr \
+          --disable-man-doc \
+          --sbindir=/usr/bin \
+          --without-cli \
+          --with-json=no \
+          --with-mini-gmp=yes \
+          --disable-shared \
+          --enable-static
+        # LDFLAGS is deliberately NOT exported before ./configure: `-all-static` is a libtool-only
+        # flag (tells libtool to forward -static through to the real compiler/linker for its own
+        # managed libraries), not a real gcc/ld flag - configure's own "can the C compiler create
+        # executables" sanity check invokes gcc directly, not through libtool, and fails outright
+        # if LDFLAGS already contains it. Passed only at `make` time instead, where every actual
+        # link goes through libtool. Bare `-static` silently produces a still-dynamically-linked
+        # `nft` (NEEDED libc.so): libtool reads it as "prefer static libtool libraries", not
+        # "link fully static".
+        make -j $(nproc) LDFLAGS="-all-static"
+    install:
+      - |
+        cd /src/nftables
+        make install DESTDIR=/rootfs
+        rm -rf /rootfs/usr/share/
+      - |
+        # nft is a static binary: every library linked into it travels with its license text.
+        licenses=/rootfs/usr/local/share/licenses/nftables
+        mkdir -p "$licenses"
+        cp /src/nftables/COPYING "$licenses/nftables.LICENSE"
+        cp /src/libnftnl/COPYING "$licenses/libnftnl.LICENSE"
+        cp /src/libmnl/COPYING "$licenses/libmnl.LICENSE"
+        cp /src/musl/COPYRIGHT "$licenses/musl.LICENSE"
+        printf 'nftables %s, built without modification from https://netfilter.org/projects/nftables/files/nftables-%s.tar.xz\n' \
+          "{{ .BUILD_ARG_NFTABLES_VERSION }}" "{{ .BUILD_ARG_NFTABLES_VERSION }}" > "$licenses/nftables.SOURCE"
+        printf 'libnftnl %s, statically linked into nft, built without modification from https://netfilter.org/projects/libnftnl/files/libnftnl-%s.tar.xz\n' \
+          "{{ .BUILD_ARG_LIBNFTNL_VERSION }}" "{{ .BUILD_ARG_LIBNFTNL_VERSION }}" > "$licenses/libnftnl.SOURCE"
+        printf 'libmnl %s, statically linked into nft, built without modification from https://www.netfilter.org/projects/libmnl/files/libmnl-%s.tar.bz2\n' \
+          "{{ .BUILD_ARG_LIBMNL_VERSION }}" "{{ .BUILD_ARG_LIBMNL_VERSION }}" > "$licenses/libmnl.SOURCE"
+        printf 'musl %s, statically linked into nft from the siderolabs toolchain, source https://www.musl-libc.org/releases/musl-%s.tar.gz\n' \
+          "{{ .BUILD_ARG_MUSL_VERSION }}" "{{ .BUILD_ARG_MUSL_VERSION }}" > "$licenses/musl.SOURCE"
+    test:
+      - |
+        # A truly static ELF has no PT_INTERP program header (no dynamic linker to invoke) - more
+        # portable across build-image toolchains than parsing `file`'s freeform text output.
+        ! readelf -l /rootfs/usr/bin/nft | grep -q INTERP
+      - |
+        licenses=/rootfs/usr/local/share/licenses/nftables
+        expect() {
+          grep -q "$2" "$licenses/$1" || { echo "$licenses/$1 lacks '$2'"; exit 1; }
+        }
+        expect nftables.LICENSE 'Version 2, June 1991'
+        expect libnftnl.LICENSE 'Version 2, June 1991'
+        expect libmnl.LICENSE 'Version 2.1, February 1999'
+        expect musl.LICENSE 'Permission is hereby granted'
+        for component in nftables libnftnl libmnl musl; do
+          expect "$component.SOURCE" "^$component "
+        done
+        # musl's text comes from a tarball pinned in versions.env, while the libc.a that nft
+        # links comes from the tools image PKGS selects; a PKGS bump must not ship a stale text.
+        # The loader exits non-zero when run bare, so its banner is captured before matching.
+        loader=$(/lib/ld-musl-*.so.1 2>&1 || true)
+        grep -qx 'Version {{ .BUILD_ARG_MUSL_VERSION }}' <<<"$loader" \
+          || { echo "tools image musl is not {{ .BUILD_ARG_MUSL_VERSION }}: $loader"; exit 1; }
+    sbom:
+      outputPath: /rootfs/usr/share/spdx/nftables-pkg.spdx.json
+      version: {{ .BUILD_ARG_NFTABLES_VERSION }}
+      cpes:
+        - cpe:2.3:a:netfilter:nftables:{{ .BUILD_ARG_NFTABLES_VERSION }}:*:*:*:*:*:*:*
+      licenses:
+        - GPL-2.0-or-later
+finalize:
+  - from: /rootfs
+    to: /

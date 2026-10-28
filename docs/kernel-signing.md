@@ -1,71 +1,37 @@
-# Getting a signed kernel into the final installer
+# Getting a signed kernel and module into the installer
 
-This repo's half of the mechanism described in `../talos-kernel/docs/kernel-signing.md`
-(read that first for why the module needs to be signed the way it is at all) - how a
-kernel package built there actually ends up inside a bootable installer image, without
-ever needing a custom-built `imager` tool.
+Nodes boot with `module.sig_enforce=1`, so the amneziawg module has to be signed with the key of
+the kernel it loads into. [talos-kernel](https://github.com/slipmesh/talos-kernel) builds the
+kernel and the module together for that reason; its
+[docs/kernel-signing.md](https://github.com/slipmesh/talos-kernel/blob/main/docs/kernel-signing.md)
+explains the signing itself. This repository only carries the two results into an installer
+without touching them.
 
-## Why not build a custom imager image
+## The module: an OCI layer, not a rebuild
 
-The official docs' example (`make kernel initramfs imager PKG_KERNEL=...`, run from a
-`siderolabs/talos` checkout) reads like you need a whole custom `imager` container image.
-Two things make a lighter approach both correct and preferable:
+`extensions/amneziawg/pkg.yaml` takes `amneziawg-pkg` from talos-kernel as an image dependency
+and copies its `.ko` files into the extension, the way upstream's `storage/zfs` takes `zfs-pkg`.
+Nothing is recompiled, so the signature stays as talos-kernel made it. The package's test fails
+the build if any module lacks the `~Module signature appended~` marker.
 
-1. `siderolabs/talos`'s own `imager` container has `/usr/install/<arch>/{vmlinuz,
-   initramfs.xz}` baked directly into its filesystem at build time (`Dockerfile`, the
-   `installer-build`/`imager` stages: `COPY --from=pkg-kernel-amd64 /boot/vmlinuz
-   /usr/install/amd64/vmlinuz`, and similarly for the initramfs). `imager`'s own profile
-   format reads `input.kernel.path`/`input.initramfs.path` as plain paths *on its own
-   container filesystem* (`pkg/imager/profile/input.go`'s `FileAsset{Path string}` —
-   nothing baseInstaller-relative about it), independent of whatever `baseInstaller`
-   image it's asked to otherwise mutate.
-2. Docker lets us override files inside a container at `docker run` time with a bind
-   mount — no rebuild required.
+## The kernel: the stock imager with two files swapped
 
-So: `make kernel initramfs PKG_KERNEL=<KERNEL_IMAGE> DEST=...` in a `siderolabs/talos`
-checkout (a *local* output, `local-kernel`/`local-initramfs` — no `imager` container gets
-built at all) produces `vmlinuz-<arch>` and `initramfs-<arch>.xz`, both built against
-whatever kernel package `KERNEL_IMAGE` points at — meaning `initramfs.xz`'s own squashfs
-content (including anything like `virtio_pci.ko`) comes from the *same* coordinated,
-coherently-signed build as the kernel's own modules, not a mismatched stock one (see
-`../talos-kernel/docs/kernel-signing.md`, "What doesn't work: swapping only the kernel"
-for why that mismatch matters). `make installer`'s recipe then runs the **stock**
-`ghcr.io/siderolabs/imager:$(TALOS_VERSION)` — completely unmodified — bind-mounting
-those two extracted files over their conventional paths:
+`make installer` gets a matching `vmlinuz` and `initramfs.xz` from a siderolabs/talos checkout,
+with `make local-kernel local-initramfs PKG_KERNEL=<talos-kernel's kernel image>`. The initramfs
+then holds modules from the same signed build as the kernel. A stock initramfs would carry
+modules signed with siderolabs' key, `virtio_pci.ko` among them, which this kernel refuses.
+
+The stock `ghcr.io/siderolabs/imager` then bakes the installer, unmodified. It reads
+`input.kernel.path` and `input.initramfs.path` from its own filesystem, so `make installer`
+bind-mounts the two files over `/usr/install/<arch>/`. The rootfs, sd-boot, sd-stub and system
+extensions come out exactly as stock imager assembles them, and no custom imager image is built
+or published.
+
+## Verifying on a node
 
 ```sh
-docker run --rm -i --privileged --network host \
-  -v $(OUT_DIR):/out:z \
-  -v $(CUSTOM_KERNEL_DIR)/vmlinuz-$(TARGET_ARCH):/usr/install/$(TARGET_ARCH)/vmlinuz:ro \
-  -v $(CUSTOM_KERNEL_DIR)/initramfs-$(TARGET_ARCH).xz:/usr/install/$(TARGET_ARCH)/initramfs.xz:ro \
-  -v /dev:/dev $(IMAGER) - --insecure < profile.yaml
-```
-
-Everything else about the installer — rootfs, sd-boot/sd-stub, system extensions via
-`systemExtensions` — is untouched, exactly as stock imager assembles it. Only the two
-files a mismatched signing key could ever actually affect are swapped in.
-
-This also means no separate `imager` image gets built, tagged, or published — one fewer
-artifact to track.
-
-## The `--network=host` fix
-
-`local-kernel`/`local-initramfs` (not the bare `kernel`/`initramfs` shortcuts, which
-don't forward `TARGET_ARGS`) run with `TARGET_ARGS="--network=host"`. This matters only
-for a local build of a foreign architecture - CI builds each arch on a runner of that
-architecture - but there it is required: `siderolabs/talos`'s own Dockerfile `RUN` steps
-(`go mod download`, in particular) hang indefinitely under plain Docker bridge networking
-when run through QEMU emulation. A plain
-`docker run --platform=linux/amd64 ... curl -4` to any address times out under the default
-bridge network on an arm64 host, and works instantly under `--network=host`.
-Nothing wrong with the module fetch itself — `--network=host` sidesteps whatever's broken
-in the emulated-container-to-bridge-NAT path entirely.
-
-## Verifying it worked
-
-```sh
-talosctl -n <node> read /proc/cmdline                      # module.sig_enforce=1
-talosctl -n <node> read /sys/module/module/parameters/sig_enforce   # Y
+talosctl -n <node> read /proc/cmdline                                # module.sig_enforce=1
+talosctl -n <node> read /sys/module/module/parameters/sig_enforce    # Y
 talosctl -n <node> dmesg | grep -iE "unsigned module|module verification failed"   # nothing
-talosctl -n <node> get extensions                           # every extension you passed
+talosctl -n <node> get extensions                                    # amneziawg, awg, router, nftables
 ```
