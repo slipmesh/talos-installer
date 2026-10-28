@@ -36,9 +36,8 @@ build/              (gitignored) the checkouts and the imager output
 
 ## Building
 
-Needs Docker with `docker buildx`, and `xz`, `zstd`, `cpio` and `unsquashfs` for
-`check-initramfs`. Builds work on one `TARGET_ARCH` at a time; on a host of the other arch, buildx
-emulates it under QEMU.
+Needs Docker with `docker buildx`. Builds work on one `TARGET_ARCH` at a time; on a host of the
+other arch, buildx emulates it under QEMU.
 
 ```sh
 make print-config TARGET_ARCH=amd64   # resolved pins and image names
@@ -90,10 +89,9 @@ talosctl -n <node> upgrade --image ghcr.io/slipmesh/talos-installer:<release tag
 
 Every extension's bldr test runs siderolabs' `extensions-validator` on it, and the amneziawg,
 nftables-pkg and router-bird stages test their own output: module signatures, a static `nft`
-with its license texts, BIRD's own `make check`. Before baking, `installer` runs
-`make check-initramfs`: the Talos built into the initramfs must report the release
-`KERNEL_RELEASE` names, which machined compares with the kubelet image when it validates its
-config. A build that completes has passed them all.
+with its license texts, BIRD's own `make check`. Before building Talos, `installer` runs
+`make check-talos-build`: the talos Makefile must build with the release as `TAG` and siderolabs'
+registry, which it bakes into machined. A build that completes has passed them all.
 
 On a node, after `talosctl upgrade`, see the checks in
 [kernel-signing.md](docs/kernel-signing.md#verifying-on-a-node) and each extension's doc.

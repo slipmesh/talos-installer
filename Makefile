@@ -133,27 +133,22 @@ check-version: ## Assert VERSION is a release of TALOS_VERSION, vX.Y.Z+sm.N.
 	  || { echo "VERSION must be $(TALOS_VERSION)+sm.<N>, got '$(VERSION)'"; exit 1; }
 	@echo "$(VERSION) releases Talos $(TALOS_VERSION)"
 
-# Talos writes the TAG it was built with into the rootfs' os-release, and machined checks it
-# against the kubelet image: anything but the release breaks the node's config validation.
-INITRAMFS := $(CUSTOM_KERNEL_DIR)/initramfs-$(TARGET_ARCH).xz
-define check-initramfs
-tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
-case $$(od -An -tx1 -N4 $(INITRAMFS) | tr -d ' ') in 28b52ffd) unpack="zstd -dcq";; *) unpack="xz -dc";; esac; \
-$$unpack $(INITRAMFS) > "$$tmp/initramfs.cpio"; \
-(cd "$$tmp" && cpio -id --quiet rootfs.sqsh < initramfs.cpio); \
-got=$$(unsquashfs -q -cat "$$tmp/rootfs.sqsh" etc/os-release | sed -n 's/^VERSION_ID=//p' | tr -d '"'); \
-[ "$$got" = "$(TALOS_VERSION)" ] || { echo "$(INITRAMFS) is Talos '$$got', want $(TALOS_VERSION)"; exit 1; }; \
-echo "$(INITRAMFS) is Talos $$got"
-endef
-
-.PHONY: check-initramfs
-check-initramfs: ## Assert this arch's extracted initramfs is the Talos release KERNEL_RELEASE names.
-	@$(check-initramfs)
+# The talos Makefile bakes TAG, REGISTRY and USERNAME into machined, which checks TAG against the
+# kubelet image: anything but the release breaks a node's config validation. This asks that
+# Makefile what it would build with, called the way `installer` calls it.
+.PHONY: check-talos-build
+check-talos-build: checkout-talos ## Assert the Talos build gets its release as TAG and siderolabs' registry.
+	@for want in TAG=$(TALOS_VERSION) REGISTRY=ghcr.io USERNAME=siderolabs; do \
+	  var=$${want%%=*}; \
+	  got=$$($(MAKE) -s --no-print-directory -C $(TALOS_DIR) --eval='print-%: ; @echo $$($$*)' print-$$var); \
+	  [ "$$got" = "$${want#*=}" ] || { echo "the Talos build would get $$var=$$got, want $${want#*=}"; exit 1; }; \
+	done
+	@echo "the Talos build gets TAG=$(TALOS_VERSION), ghcr.io/siderolabs"
 
 .PHONY: preflight
 preflight: ## Check this machine can run the build.
 	@fail=0; \
-	for t in docker git jq curl xz zstd cpio unsquashfs; do command -v $$t >/dev/null || { echo "MISSING: $$t"; fail=1; }; done; \
+	for t in docker git jq curl; do command -v $$t >/dev/null || { echo "MISSING: $$t"; fail=1; }; done; \
 	docker buildx version >/dev/null 2>&1 || { echo "MISSING: docker buildx"; fail=1; }; \
 	docker version >/dev/null 2>&1 || { echo "docker daemon not reachable"; fail=1; }; \
 	[ $$fail -eq 0 ] && echo "preflight OK" || exit 1
@@ -215,7 +210,7 @@ extensions: $(addprefix extension-,$(EXTENSIONS)) ## Build and push all four ext
 # TARGET_ARGS. --network=host only matters for a build of a foreign arch: talos' own Dockerfile
 # steps hang on `go mod download` under QEMU behind docker's bridge network.
 .PHONY: installer
-installer: checkout-talos | $(OUT_DIR) ## Bake the installer from the kernel and the extensions pushed under TAG.
+installer: check-talos-build | $(OUT_DIR) ## Bake the installer from the kernel and the extensions pushed under TAG.
 	@echo "==> exporting $(BASE_INSTALLER) to an OCI layout"
 	@docker pull -q --platform linux/$(TARGET_ARCH) $(BASE_INSTALLER) >/dev/null
 	@rm -rf $(BASE_OCI_DIR); mkdir -p $(BASE_OCI_DIR)
@@ -229,7 +224,6 @@ installer: checkout-talos | $(OUT_DIR) ## Bake the installer from the kernel and
 	@$(MAKE) -C $(TALOS_DIR) local-kernel local-initramfs \
 	  PKG_KERNEL=$(KERNEL_IMAGE) PLATFORM=linux/$(TARGET_ARCH) DEST=$(CURDIR)/$(CUSTOM_KERNEL_DIR) \
 	  TARGET_ARGS="--network=host"
-	@$(check-initramfs)
 	@{ \
 	  echo "arch: $(TARGET_ARCH)"; \
 	  echo "platform: metal"; \
