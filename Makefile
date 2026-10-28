@@ -20,7 +20,7 @@ unexport $(foreach v,$(.VARIABLES),$(if $(filter command line,$(origin $(v))),$(
 
 _GOALS := $(or $(MAKECMDGOALS),$(.DEFAULT_GOAL))
 ifeq ($(TARGET_ARCH),)
-  ifneq ($(filter-out help print-config check-pins check-version hashes manifest clean distclean checkout-%,$(_GOALS)),)
+  ifneq ($(filter-out help print-config check-pins check-version check-talos-build hashes manifest clean distclean checkout-%,$(_GOALS)),)
     $(error TARGET_ARCH not set - pass TARGET_ARCH=amd64 or TARGET_ARCH=arm64)
   endif
 endif
