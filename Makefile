@@ -13,7 +13,7 @@ SHELL := /bin/bash
 
 _GOALS := $(or $(MAKECMDGOALS),$(.DEFAULT_GOAL))
 ifeq ($(TARGET_ARCH),)
-  ifneq ($(filter-out help print-config check-pins hashes manifest clean distclean checkout-%,$(_GOALS)),)
+  ifneq ($(filter-out help print-config check-pins check-version hashes manifest clean distclean checkout-%,$(_GOALS)),)
     $(error TARGET_ARCH not set - pass TARGET_ARCH=amd64 or TARGET_ARCH=arm64)
   endif
 endif
@@ -119,6 +119,12 @@ check-pins: ## Assert the pins agree with KERNEL_RELEASE and its Talos release.
 	@[[ "$(DAEMONS_IMAGE)" =~ @sha256:[0-9a-f]{64}$$ ]] \
 	  || { echo "DAEMONS_IMAGE must be pinned by digest: $(DAEMONS_IMAGE)"; exit 1; }
 	@echo "DAEMONS_IMAGE pinned by digest"
+
+.PHONY: check-version
+check-version: ## Assert VERSION is a release of TALOS_VERSION, vX.Y.Z+sm.N.
+	@[[ "$(VERSION)" =~ ^$(subst .,\.,$(TALOS_VERSION))\+sm\.[1-9][0-9]*$$ ]] \
+	  || { echo "VERSION must be $(TALOS_VERSION)+sm.<N>, got '$(VERSION)'"; exit 1; }
+	@echo "$(VERSION) releases Talos $(TALOS_VERSION)"
 
 .PHONY: preflight
 preflight: ## Check this machine can run the build.
