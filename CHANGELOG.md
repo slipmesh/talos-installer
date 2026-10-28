@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and follows [Semantic Versioning](https://semver.org/).
 
+## [1.14.5+sm.2] - 2026-10-28
+
+### Fixed 🐛
+
+- Keep this build's variables out of the Talos build (#11)
+
 ## [1.14.5+sm.1] - 2026-10-28
 
 ### Added ✨
