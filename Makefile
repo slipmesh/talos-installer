@@ -11,9 +11,16 @@ SHELL := /bin/bash
 .SHELLFLAGS := -euo pipefail -c
 .DEFAULT_GOAL := help
 
+# make hands variables set on its command line to every sub-make, through MAKEFLAGS and the
+# environment both. The upstream Makefiles this one calls read TAG, REGISTRY and PUSH for their own
+# purposes, and talos bakes TAG and REGISTRY into machined: a CI run's TAG=sha-<commit> made the
+# installed Talos reject its own config. They get only what each call passes explicitly.
+MAKEOVERRIDES :=
+unexport $(foreach v,$(.VARIABLES),$(if $(filter command line,$(origin $(v))),$(v)))
+
 _GOALS := $(or $(MAKECMDGOALS),$(.DEFAULT_GOAL))
 ifeq ($(TARGET_ARCH),)
-  ifneq ($(filter-out help print-config check-pins check-version hashes manifest clean distclean checkout-%,$(_GOALS)),)
+  ifneq ($(filter-out help print-config check-pins check-version check-talos-build hashes manifest clean distclean checkout-%,$(_GOALS)),)
     $(error TARGET_ARCH not set - pass TARGET_ARCH=amd64 or TARGET_ARCH=arm64)
   endif
 endif
@@ -126,6 +133,18 @@ check-version: ## Assert VERSION is a release of TALOS_VERSION, vX.Y.Z+sm.N.
 	  || { echo "VERSION must be $(TALOS_VERSION)+sm.<N>, got '$(VERSION)'"; exit 1; }
 	@echo "$(VERSION) releases Talos $(TALOS_VERSION)"
 
+# The talos Makefile bakes TAG, REGISTRY and USERNAME into machined, which checks TAG against the
+# kubelet image: anything but the release breaks a node's config validation. This asks that
+# Makefile what it would build with, called the way `installer` calls it.
+.PHONY: check-talos-build
+check-talos-build: checkout-talos ## Assert the Talos build gets its release as TAG and siderolabs' registry.
+	@for want in TAG=$(TALOS_VERSION) REGISTRY=ghcr.io USERNAME=siderolabs; do \
+	  var=$${want%%=*}; \
+	  got=$$($(MAKE) -s --no-print-directory -C $(TALOS_DIR) --eval='print-%: ; @echo $$($$*)' print-$$var); \
+	  [ "$$got" = "$${want#*=}" ] || { echo "the Talos build would get $$var=$$got, want $${want#*=}"; exit 1; }; \
+	done
+	@echo "the Talos build gets TAG=$(TALOS_VERSION), ghcr.io/siderolabs"
+
 .PHONY: preflight
 preflight: ## Check this machine can run the build.
 	@fail=0; \
@@ -191,7 +210,7 @@ extensions: $(addprefix extension-,$(EXTENSIONS)) ## Build and push all four ext
 # TARGET_ARGS. --network=host only matters for a build of a foreign arch: talos' own Dockerfile
 # steps hang on `go mod download` under QEMU behind docker's bridge network.
 .PHONY: installer
-installer: checkout-talos | $(OUT_DIR) ## Bake the installer from the kernel and the extensions pushed under TAG.
+installer: check-talos-build | $(OUT_DIR) ## Bake the installer from the kernel and the extensions pushed under TAG.
 	@echo "==> exporting $(BASE_INSTALLER) to an OCI layout"
 	@docker pull -q --platform linux/$(TARGET_ARCH) $(BASE_INSTALLER) >/dev/null
 	@rm -rf $(BASE_OCI_DIR); mkdir -p $(BASE_OCI_DIR)
