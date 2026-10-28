@@ -1,14 +1,16 @@
-# Every push and pull request builds the four extensions and the installer for both arches, each
-# on a runner of its own arch, against a registry local to the job, which the imager pulls from.
-# Only main and release-* publish: their extensions and installer are copied to ghcr.io as
-# `sha-<commit>`. nftables-pkg is an input to the nftables extension only and is never published.
+# Every pull request and every push to main or release-* builds the four extensions and the
+# installer for both arches, each on a runner of its own arch, against a registry local to the
+# job, which the imager pulls from. Other branches build through their pull request only: a build
+# takes the kernel and BIRD on both arches, too much to run twice per push. main and release-*
+# then publish: their extensions and installer are copied to ghcr.io as `sha-<commit>`.
+# nftables-pkg is an input to the nftables extension only and is never published.
 #
 # A release builds nothing: the tag retags the commit's `sha-<commit>` installer.
 name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [main, "release-*"]
     tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
   pull_request:
 

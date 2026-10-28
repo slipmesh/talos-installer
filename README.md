@@ -62,9 +62,10 @@ another registry under the same tags.
 
 ## CI and releases
 
-Every push and pull request builds the four extensions and the installer for both arches, each on
-a runner of its own arch, against a registry local to the job. A push to `main` or a `release-*`
-branch then publishes them to ghcr.io as `sha-<commit>` and merges the installer into a
+Every pull request and every push to `main` or a `release-*` branch builds the four extensions and
+the installer for both arches, each on a runner of its own arch, against a registry local to the
+job. Other branches build through their pull request only. A push to `main` or a `release-*`
+branch then publishes the images to ghcr.io as `sha-<commit>` and merges the installer into a
 multi-arch `ghcr.io/slipmesh/talos-installer:sha-<commit>`.
 
 A release builds nothing. The Release PR workflow (Actions, then Release PR) opens
