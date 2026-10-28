@@ -1,0 +1,13 @@
+version: v1alpha1
+metadata:
+  name: nftables
+  version: "{{ .VERSION }}"
+  author: slipmesh
+  description: |
+    Applies an nftables ruleset rendered from a template in an ExtensionServiceConfig, with a
+    statically linked `nft`, and reapplies it whenever something else on the node removes its
+    tables. Only the tables its own ruleset declares are replaced, never the whole ruleset. See
+    docs/nftables.md in talos-installer.
+  compatibility:
+    talos:
+      version: ">= v1.10.0"

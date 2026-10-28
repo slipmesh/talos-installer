@@ -1,117 +1,99 @@
 # talos-installer
 
-Assembles a bootable Talos installer image from a signed kernel and any number of system
-extensions — the final "glue" step of a split five-repo pipeline. Deliberately generic:
-this repo has no source-level knowledge of `awg`/`router`/anything else, only OCI image
-references passed in on the command line. Adding a fifth extension later needs zero
-changes here.
+Builds the slipmesh Talos system extensions and bakes them, with a signed kernel, into a Talos
+installer image that nodes upgrade to:
 
-Builds with **Docker** (`docker buildx`), on any machine, for any target architecture.
+| extension | carries | docs |
+| --- | --- | --- |
+| `amneziawg` | the AmneziaWG kernel module, signed in talos-kernel | [awg.md](docs/awg.md) |
+| `awg` | `ext-awg`, which brings up the AmneziaWG interfaces | [awg.md](docs/awg.md) |
+| `router` | `ext-router` with a static BIRD and bird_exporter | [router.md](docs/router.md) |
+| `nftables` | the nftables ruleset service with a static `nft` | [nftables.md](docs/nftables.md) |
 
-## This is one of five repos
+The inputs come by pin from two other repositories, built there and never rebuilt here:
 
-- [talos-kernel](https://github.com/slipmesh/talos-kernel) —
-  signed kernel + `amneziawg-pkg`
-- [talos-awg-extension](https://github.com/slipmesh/talos-awg-extension) —
-  amneziawg system extension (pulls `amneziawg-pkg`)
-- [talos-router-extension](https://github.com/slipmesh/talos-router-extension) —
-  router system extension (no kernel dependency)
-- [talos-nftables-extension](https://github.com/slipmesh/talos-nftables-extension) —
-  nftables system extension (no kernel dependency)
-- [talos-installer](https://github.com/slipmesh/talos-installer) —
-  assembles a kernel + N extensions into an installer — **this repo**
+- [talos-kernel](https://github.com/slipmesh/talos-kernel): the signed kernel and the
+  `amneziawg-pkg` module package, named by `KERNEL_RELEASE`. See
+  [kernel-signing.md](docs/kernel-signing.md) for how both reach the installer untouched.
+- [talos-extensions](https://github.com/slipmesh/talos-extensions): the `awg`, `router` and
+  `nftables` daemons with their extension-service specs, in the image `DAEMONS_IMAGE` pins by
+  digest.
 
-This repo consumes the other four's *published* images only, by tag - it never checks
-out or builds their source. See `docs/kernel-signing.md` for how a signed kernel actually
-ends up inside the final installer without needing a custom `imager` image.
+The extensions are built with siderolabs/extensions' own bldr pipeline, at the tag of the Talos
+release `KERNEL_RELEASE` names; the installer is baked by the stock siderolabs imager of that
+release.
 
-## Usage
-
-`KERNEL_IMAGE` and `EXTENSIONS` (space-separated image refs) are required, no defaults -
-a silently-wrong kernel or an accidentally-dropped extension is worse than a loud error
-demanding both every time. `EXTENSIONS` entries are **arch-less base refs** - `installer`
-appends `-$(TARGET_ARCH)` itself (every extension repo publishes an arch-suffixed tag,
-never a multi-arch manifest, so the same `EXTENSIONS` string has to resolve correctly for
-both arches `release`'s loop builds - see the Makefile's own comment):
-
-```sh
-make print-config TARGET_ARCH=amd64 \
-  KERNEL_IMAGE=ghcr.io/slipmesh/kernel:v0.1.1-talos1.13.9 \
-  EXTENSIONS="ghcr.io/slipmesh/talos-awg-extension:v0.1.2-talos1.13.9 ghcr.io/slipmesh/talos-router-extension:v0.1.1-bird2.18"
-
-make preflight   # docker/buildx/git/jq present, KERNEL_IMAGE/EXTENSIONS set
-
-make installer TARGET_ARCH=amd64 \
-  KERNEL_IMAGE=ghcr.io/slipmesh/kernel:v0.1.1-talos1.13.9 \
-  EXTENSIONS="ghcr.io/slipmesh/talos-awg-extension:v0.1.2-talos1.13.9 ghcr.io/slipmesh/talos-router-extension:v0.1.1-bird2.18"
-
-make push TARGET_ARCH=amd64
-```
-
-Get the actual current tags from each extension repo's own `make extension` output (it
-prints the published ref) and from `talos-kernel`'s `make kernel` output.
-
-`installer`/`push` work on one `TARGET_ARCH` at a time and tag/publish
-`installer-<talos>-<build-slug>-<arch>`. `<build-slug>` is a short hash of
-`KERNEL_IMAGE`+`EXTENSIONS` (not a version you pick) — it exists purely so a rebuild with
-different inputs always gets a genuinely new tag; re-pushing under a tag that's already
-been used has been observed to *not* reliably reach a node on `talosctl upgrade`
-(confirmed directly, at both the extension and the installer level). The tag nodes actually pull
-is the arch-less `installer-<talos>-<build-slug>`, a multi-arch manifest:
-
-```sh
-make release TARGET_ARCH=amd64 \
-  KERNEL_IMAGE=... EXTENSIONS="..."   # builds+pushes every ARCHS entry, then the multi-arch tag
-```
-
-Then, per node (check `make print-config` for the exact tag - or just read what
-`make installer`/`release` printed):
-
-```sh
-talosctl -n <node> upgrade --image ghcr.io/slipmesh/talos-installer:installer-<talos>-<build-slug>
-```
-
-## How it works
-
-`checkout-talos` clones `siderolabs/talos` at the pinned `TALOS_VERSION` tag (used only
-for its own `make local-kernel local-initramfs` recipe, not modified). `installer`:
-
-1. Exports the stock `ghcr.io/siderolabs/installer-base:$(TALOS_VERSION)` to a local OCI
-   layout — the rootfs and sd-boot/sd-stub come from here. Kernel and initramfs are
-   replaced in step 2, extensions added in step 3; neither comes from this image.
-2. Extracts a coherent `vmlinuz`+`initramfs.xz` pair from `KERNEL_IMAGE` via
-   `siderolabs/talos`'s own `local-kernel`/`local-initramfs` targets.
-3. Runs the **stock** `ghcr.io/siderolabs/imager` — unmodified — bind-mounting those two
-   files over its own baked-in paths, with every `EXTENSIONS` entry listed in the
-   profile's `systemExtensions`.
-
-See `docs/kernel-signing.md` for the full detail and why this is both simpler and safer
-than building a custom `imager` image.
+## Layout
 
 ```text
-versions.env    TALOS_VERSION (must match what KERNEL_IMAGE/every extension were built
-                against), IMAGE (registry namespace for the published installer tag)
-docs/
-  kernel-signing.md   how a signed kernel gets into the installer without a custom imager
-build/          (gitignored) the talos checkout, plus imager output
+versions.env        every pin: kernel release, daemons image, pkgs, nftables, BIRD, registry
+extensions/<name>/  overlaid onto the siderolabs/extensions checkout; router-bird and
+                    router-bird-exporter are build stages of router
+pkgs/nftables-pkg/  overlaid onto the siderolabs/pkgs checkout, builds the static nft
+docs/               per extension, and how the signed kernel gets in
+build/              (gitignored) the checkouts and the imager output
 ```
 
-## Verifying a build
+## Building
+
+Needs Docker with `docker buildx`. Builds work on one `TARGET_ARCH` at a time; on a host of the
+other arch, buildx emulates it under QEMU.
 
 ```sh
-docker buildx imagetools inspect <installer image>
+make print-config TARGET_ARCH=amd64   # resolved pins and image names
+make check-pins                       # pins agree with KERNEL_RELEASE and its Talos release
+make extensions TARGET_ARCH=amd64     # build and push the four extensions
+make installer push TARGET_ARCH=amd64 # bake and push this arch's installer
+make manifest                         # combine both arches into the tag nodes pull
 ```
 
-Full node-level verification after `talosctl upgrade`:
+Images go to `REGISTRY` (default `ghcr.io/slipmesh`) and are tagged `TAG`, by default
+`sha-<HEAD commit>`, per arch as `<TAG>-<arch>`. The imager pulls the extensions without the
+host's registry credentials, so they must be pullable anonymously from `REGISTRY`. A local
+registry works:
 
 ```sh
-talosctl -n <node> read /proc/cmdline                       # module.sig_enforce=1
-talosctl -n <node> dmesg | grep -iE "unsigned module|module verification failed"   # nothing
-talosctl -n <node> get extensions                            # every extension you passed
+docker run -d -p 5000:5000 registry:3
+make extensions installer push TARGET_ARCH=amd64 REGISTRY=localhost:5000
+```
+
+`make publish PUBLISH_REGISTRY=...` copies one arch's extensions and installer from `REGISTRY` to
+another registry under the same tags.
+
+## CI and releases
+
+Every push and pull request builds the four extensions and the installer for both arches, each on
+a runner of its own arch, against a registry local to the job. A push to `main` or a `release-*`
+branch then publishes them to ghcr.io as `sha-<commit>` and merges the installer into a
+multi-arch `ghcr.io/slipmesh/talos-installer:sha-<commit>`.
+
+A release builds nothing. The Release PR workflow (Actions, then Release PR) opens
+`chore: release vX.Y.Z` with `CHANGELOG.md` regenerated; merging it tags the commit, retags its
+`sha-<commit>` installer as the release, and creates the GitHub Release. Then, per node:
+
+```sh
+talosctl -n <node> upgrade --image ghcr.io/slipmesh/talos-installer:<release tag, + as ->
 ```
 
 ## Bumping
 
-Bump `TALOS_VERSION` here to match whatever `talos-kernel` and every extension repo
-were built against, then re-run `installer`/`release` with their current published tags.
-This repo has no other pins of its own.
+- **Talos patch:** release talos-kernel for it, then set `KERNEL_RELEASE` to that release. `AWG_REF`
+  and `PKGS` follow: `make check-pins` names the values it expects.
+- **Daemons:** set `DAEMONS_IMAGE` to a newer `ghcr.io/slipmesh/talos-extensions` tag with its
+  digest, from `docker buildx imagetools inspect <image>:<tag>`.
+- **nftables, libnftnl, libmnl, musl:** set the version, run `make hashes`, paste the values back.
+- **BIRD:** set `BIRD_REV` and `BIRD_COMMIT`, the commit that tag names upstream.
+
+## Verifying a build
+
+Every extension's bldr test runs siderolabs' `extensions-validator` on it, and the amneziawg,
+nftables-pkg and router-bird stages test their own output: module signatures, a static `nft`
+with its license texts, BIRD's own `make check`. A build that completes has passed them.
+
+On a node, after `talosctl upgrade`, see the checks in
+[kernel-signing.md](docs/kernel-signing.md#verifying-on-a-node) and each extension's doc.
+
+## License
+
+This repository's own code is MIT or Apache-2.0. The images it builds also distribute the
+third-party software listed in each extension's doc, with its license texts inside the image.

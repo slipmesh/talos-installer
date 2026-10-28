@@ -1,0 +1,133 @@
+# Every push and pull request builds the four extensions and the installer for both arches, each
+# on a runner of its own arch, against a registry local to the job, which the imager pulls from.
+# Only main and release-* publish: their extensions and installer are copied to ghcr.io as
+# `sha-<commit>`. nftables-pkg is an input to the nftables extension only and is never published.
+#
+# A release builds nothing: the tag retags the commit's `sha-<commit>` installer.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  pins:
+    if: github.ref_type != 'tag'
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: make check-pins
+
+  build:
+    needs: pins
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-26.04
+          - arch: arm64
+            runner: ubuntu-26.04-arm
+    services:
+      registry:
+        image: registry:3
+        ports: ["5000:5000"]
+    env:
+      PUBLISH: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # The talos checkout, the kernel build context and the bldr stages need more room than a
+      # runner has free.
+      - name: Free disk space
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+
+      # Host networking lets the builder reach the job's registry on localhost.
+      - uses: docker/setup-buildx-action@v4
+        with:
+          driver-opts: network=host
+          buildkitd-config-inline: |
+            [registry."localhost:5000"]
+              http = true
+              insecure = true
+
+      - uses: docker/login-action@v4
+        if: env.PUBLISH == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build the extensions and the installer
+        run: |
+          make extensions installer push TARGET_ARCH=${{ matrix.arch }} TAG=sha-${{ github.sha }} \
+            REGISTRY=localhost:5000
+
+      - name: Publish them
+        if: env.PUBLISH == 'true'
+        run: |
+          make publish TARGET_ARCH=${{ matrix.arch }} TAG=sha-${{ github.sha }} \
+            REGISTRY=localhost:5000 PUBLISH_REGISTRY=ghcr.io/slipmesh
+
+  manifest:
+    needs: build
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-'))
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Combine both arches into the installer nodes pull
+        run: make manifest TAG=sha-${{ github.sha }} REGISTRY=ghcr.io/slipmesh
+
+  tag:
+    needs: manifest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: slipmesh/.github/.github/workflows/tag-release.yml@v1.2
+    permissions:
+      contents: write
+
+  # Runs for a release commit tagged above, or for a tag pushed by hand.
+  promote:
+    needs: tag
+    if: ${{ !cancelled() && (github.ref_type == 'tag' || needs.tag.outputs.tag != '') }}
+    uses: slipmesh/.github/.github/workflows/promote.yml@v1.2
+    permissions:
+      contents: read
+      packages: write
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
+
+  release:
+    needs: [tag, promote]
+    if: ${{ !cancelled() && needs.promote.result == 'success' }}
+    uses: slipmesh/.github/.github/workflows/release.yml@v1.2
+    permissions:
+      contents: write
+      packages: read
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
+      latest: false

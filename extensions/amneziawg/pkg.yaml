@@ -1,0 +1,38 @@
+# The amneziawg kernel module. talos-kernel builds and signs it together with the kernel it
+# ships with (docs/kernel-signing.md); it comes in here as an OCI layer and is not rebuilt, so
+# that signature is untouched.
+#
+# `name:` must equal manifest.yaml.tmpl's metadata.name: extensions-validator fails the build on
+# "pkg name does not match extension name" otherwise.
+name: amneziawg
+variant: scratch
+shell: /bin/bash
+dependencies:
+  - stage: base
+  - image: "{{ .BUILD_ARG_AMNEZIAWG_PKG }}"
+steps:
+  - install:
+      - |
+        mkdir -p /rootfs/usr/lib/modules && cp -R /usr/lib/modules/* /rootfs/usr/lib/modules/
+
+        # amneziawg-pkg installs the module's COPYING beside it.
+        mkdir -p /rootfs/usr/local/share/licenses
+        cp -a /usr/local/share/licenses/amneziawg /rootfs/usr/local/share/licenses/
+    test:
+      - |
+        # https://www.kernel.org/doc/html/v4.15/admin-guide/module-signing.html#signed-modules-and-stripping
+        unsigned=$(find /rootfs/usr/lib/modules -name '*.ko' -exec grep -FL '~Module signature appended~' {} \+)
+        [ -z "$unsigned" ] || { echo "unsigned modules: $unsigned"; exit 1; }
+      - |
+        # Matched on the version line rather than the title, which GPLv3 shares.
+        grep -q 'Version 2, June 1991' /rootfs/usr/local/share/licenses/amneziawg/COPYING
+      - |
+        mkdir -p /extensions-validator-rootfs
+        cp -r /rootfs/ /extensions-validator-rootfs/rootfs
+        cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml
+        /extensions-validator validate --rootfs=/extensions-validator-rootfs --pkg-name="${PKG_NAME}"
+finalize:
+  - from: /rootfs
+    to: /rootfs
+  - from: /pkg/manifest.yaml
+    to: /

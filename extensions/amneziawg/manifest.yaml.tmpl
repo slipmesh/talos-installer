@@ -1,0 +1,11 @@
+version: v1alpha1
+metadata:
+  name: amneziawg
+  version: "{{ .VERSION }}"
+  author: slipmesh
+  description: |
+    AmneziaWG kernel module (DPI-obfuscated WireGuard fork), signed with the key of the Talos
+    kernel it was built with.
+  compatibility:
+    talos:
+      version: ">= v1.10.0"

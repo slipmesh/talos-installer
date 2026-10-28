@@ -1,0 +1,26 @@
+# The `awg` extension service, which brings up the AmneziaWG interfaces the amneziawg module
+# provides. Its binary and its extension-service spec both come from the pinned daemons image, so
+# they are always from the same talos-extensions commit.
+name: awg
+variant: scratch
+shell: /bin/bash
+dependencies:
+  - stage: base
+  - image: "{{ .BUILD_ARG_DAEMONS }}"
+steps:
+  - install:
+      - |
+        mkdir -p /rootfs/usr/local/lib/containers/awg /rootfs/usr/local/etc/containers
+        install -m 0755 /usr/local/bin/awg /rootfs/usr/local/lib/containers/awg/awg
+        cp /usr/local/etc/containers/awg.yaml /rootfs/usr/local/etc/containers/awg.yaml
+    test:
+      - |
+        mkdir -p /extensions-validator-rootfs
+        cp -r /rootfs/ /extensions-validator-rootfs/rootfs
+        cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml
+        /extensions-validator validate --rootfs=/extensions-validator-rootfs --pkg-name="${PKG_NAME}"
+finalize:
+  - from: /rootfs
+    to: /rootfs
+  - from: /pkg/manifest.yaml
+    to: /
