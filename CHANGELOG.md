@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and follows [Semantic Versioning](https://semver.org/).
 
+## [1.14.5+sm.1] - 2026-10-28
+
+### Added ✨
+
+- Build the awg, router and nftables extensions here (#5)
+- Build against Talos v1.14.5 (#8)
+
+### CI/CD ⚙️
+
+- Release from release-* branches, named after the Talos release (#6)
+- Skip the build for Markdown-only changes (#7)
+
+### Documentation 📚
+
+- Say what the base image does not supply
+
+### Fixed 🐛
+
+- Take the base from installer-base, not installer
+
+### Miscellaneous 🧹
+
+- Bump talos to v1.14.0
+- Bump talos to v1.14.2
+- Build against Talos v1.14.4
+
 ## [0.1.1] - 2026-08-27
 
 ### CI/CD ⚙️
