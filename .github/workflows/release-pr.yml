@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Version to release; empty computes it from the commits since the last tag.
-        required: false
+        description: Version to release, vX.Y.Z+sm.N with X.Y.Z the Talos release KERNEL_RELEASE names.
+        required: true
 
 permissions:
   contents: read
@@ -18,5 +18,6 @@ jobs:
       pull-requests: write
     with:
       version: ${{ inputs.version }}
-      # The version lives in the tag and CHANGELOG.md only.
-      bump: "true"
+      # The version lives in the tag and CHANGELOG.md only; this refuses one that names another
+      # Talos release.
+      bump: make check-version VERSION="$VERSION"
