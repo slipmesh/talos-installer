@@ -89,7 +89,9 @@ talosctl -n <node> upgrade --image ghcr.io/slipmesh/talos-installer:<release tag
 
 Every extension's bldr test runs siderolabs' `extensions-validator` on it, and the amneziawg,
 nftables-pkg and router-bird stages test their own output: module signatures, a static `nft`
-with its license texts, BIRD's own `make check`. A build that completes has passed them.
+with its license texts, BIRD's own `make check`. Before building Talos, `installer` runs
+`make check-talos-build`: the talos Makefile must build with the release as `TAG` and siderolabs'
+registry, which it bakes into machined. A build that completes has passed them all.
 
 On a node, after `talosctl upgrade`, see the checks in
 [kernel-signing.md](docs/kernel-signing.md#verifying-on-a-node) and each extension's doc.
