@@ -64,12 +64,12 @@ another registry under the same tags.
 
 Every pull request and every push to `main` or a `release-*` branch builds the four extensions and
 the installer for both arches, each on a runner of its own arch, against a registry local to the
-job. Other branches build through their pull request only; pull requests touching only Markdown
-skip it. A push to `main` or a `release-*` branch then publishes the images to ghcr.io as
+job, unless it changes only Markdown, which is in no image. Other branches build through their pull
+request only. A push to `main` or a `release-*` branch then publishes the images to ghcr.io as
 `sha-<commit>` and merges the installer into a multi-arch
 `ghcr.io/slipmesh/talos-installer:sha-<commit>`.
 
-A release builds nothing: it retags the commit's `sha-<commit>` installer as the release. See
+A release builds nothing: it retags the `sha-<commit>` installer of the commit it was cut from. See
 [RELEASING.md](docs/RELEASING.md). Then, per node:
 
 ```sh

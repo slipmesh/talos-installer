@@ -1,12 +1,13 @@
 # Every pull request and every push to main or release-* builds the four extensions and the
 # installer for both arches, each on a runner of its own arch, against a registry local to the
 # job, which the imager pulls from. Other branches build through their pull request only: a build
-# takes the kernel and BIRD on both arches, too much to run twice per push. Pull requests touching
-# only Markdown skip it, so a release PR does not rebuild what its merge builds again. main and
-# release-* then publish: their extensions and installer are copied to ghcr.io as `sha-<commit>`.
+# takes the kernel and BIRD on both arches, too much to run twice per push. Markdown is in no
+# image, so a pull request or push that changes only Markdown builds nothing. main and release-*
+# then publish: their extensions and installer are copied to ghcr.io as `sha-<commit>`.
 # nftables-pkg is an input to the nftables extension only and is never published.
 #
-# A release builds nothing: the tag retags the commit's `sha-<commit>` installer.
+# A release builds nothing: the tag retags the `sha-<commit>` installer of the commit it was cut
+# from, or of its nearest built ancestor when only Markdown changed since, as a release commit does.
 name: CI
 
 on:
@@ -27,12 +28,24 @@ jobs:
   pins:
     if: github.ref_type != 'tag'
     runs-on: ubuntu-26.04
+    outputs:
+      build: ${{ steps.changes.outputs.build }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
       - run: make check-pins
+
+      # The rulesets admit only squash merges, so a push to main or release-* is one commit.
+      - name: Check whether anything but Markdown changed
+        id: changes
+        run: |
+          if git diff --quiet HEAD^ HEAD -- ':!*.md'; then echo build=false; else echo build=true; fi >> "$GITHUB_OUTPUT"
 
   build:
     needs: pins
+    if: needs.pins.outputs.build == 'true'
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -108,9 +121,9 @@ jobs:
         run: make manifest TAG=sha-${{ github.sha }} REGISTRY=ghcr.io/slipmesh
 
   tag:
-    needs: manifest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-'))
-    uses: slipmesh/.github/.github/workflows/tag-release.yml@v1.2
+    needs: [pins, manifest]
+    if: ${{ !cancelled() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')) && (needs.manifest.result == 'success' || (needs.pins.result == 'success' && needs.pins.outputs.build == 'false')) }}
+    uses: slipmesh/.github/.github/workflows/tag-release.yml@v1.3
     permissions:
       contents: write
 
@@ -118,7 +131,7 @@ jobs:
   promote:
     needs: tag
     if: ${{ !cancelled() && (github.ref_type == 'tag' || needs.tag.outputs.tag != '') }}
-    uses: slipmesh/.github/.github/workflows/promote.yml@v1.2
+    uses: slipmesh/.github/.github/workflows/promote.yml@v1.3
     permissions:
       contents: read
       packages: write
@@ -128,7 +141,7 @@ jobs:
   release:
     needs: [tag, promote]
     if: ${{ !cancelled() && needs.promote.result == 'success' }}
-    uses: slipmesh/.github/.github/workflows/release.yml@v1.2
+    uses: slipmesh/.github/.github/workflows/release.yml@v1.3
     permissions:
       contents: write
       packages: read
