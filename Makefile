@@ -19,7 +19,7 @@ ifeq ($(TARGET_ARCH),)
 endif
 
 # --- derived pins -------------------------------------------------------------------
-TALOS_VERSION           := v$(lastword $(subst +talos, ,$(KERNEL_RELEASE)))
+TALOS_VERSION           := $(firstword $(subst +, ,$(KERNEL_RELEASE)))
 UPSTREAM_EXTENSIONS_REF := $(TALOS_VERSION)
 KERNEL_TAG              := $(subst +,-,$(KERNEL_RELEASE))
 KERNEL_IMAGE            := ghcr.io/slipmesh/kernel:$(KERNEL_TAG)
