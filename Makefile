@@ -11,6 +11,13 @@ SHELL := /bin/bash
 .SHELLFLAGS := -euo pipefail -c
 .DEFAULT_GOAL := help
 
+# make hands variables set on its command line to every sub-make, through MAKEFLAGS and the
+# environment both. The upstream Makefiles this one calls read TAG, REGISTRY and PUSH for their own
+# purposes, and talos bakes TAG and REGISTRY into machined: a CI run's TAG=sha-<commit> made the
+# installed Talos reject its own config. They get only what each call passes explicitly.
+MAKEOVERRIDES :=
+unexport $(foreach v,$(.VARIABLES),$(if $(filter command line,$(origin $(v))),$(v)))
+
 _GOALS := $(or $(MAKECMDGOALS),$(.DEFAULT_GOAL))
 ifeq ($(TARGET_ARCH),)
   ifneq ($(filter-out help print-config check-pins check-version hashes manifest clean distclean checkout-%,$(_GOALS)),)
@@ -126,10 +133,27 @@ check-version: ## Assert VERSION is a release of TALOS_VERSION, vX.Y.Z+sm.N.
 	  || { echo "VERSION must be $(TALOS_VERSION)+sm.<N>, got '$(VERSION)'"; exit 1; }
 	@echo "$(VERSION) releases Talos $(TALOS_VERSION)"
 
+# Talos writes the TAG it was built with into the rootfs' os-release, and machined checks it
+# against the kubelet image: anything but the release breaks the node's config validation.
+INITRAMFS := $(CUSTOM_KERNEL_DIR)/initramfs-$(TARGET_ARCH).xz
+define check-initramfs
+tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
+case $$(od -An -tx1 -N4 $(INITRAMFS) | tr -d ' ') in 28b52ffd) unpack="zstd -dcq";; *) unpack="xz -dc";; esac; \
+$$unpack $(INITRAMFS) > "$$tmp/initramfs.cpio"; \
+(cd "$$tmp" && cpio -id --quiet rootfs.sqsh < initramfs.cpio); \
+got=$$(unsquashfs -q -cat "$$tmp/rootfs.sqsh" etc/os-release | sed -n 's/^VERSION_ID=//p' | tr -d '"'); \
+[ "$$got" = "$(TALOS_VERSION)" ] || { echo "$(INITRAMFS) is Talos '$$got', want $(TALOS_VERSION)"; exit 1; }; \
+echo "$(INITRAMFS) is Talos $$got"
+endef
+
+.PHONY: check-initramfs
+check-initramfs: ## Assert this arch's extracted initramfs is the Talos release KERNEL_RELEASE names.
+	@$(check-initramfs)
+
 .PHONY: preflight
 preflight: ## Check this machine can run the build.
 	@fail=0; \
-	for t in docker git jq curl; do command -v $$t >/dev/null || { echo "MISSING: $$t"; fail=1; }; done; \
+	for t in docker git jq curl xz zstd cpio unsquashfs; do command -v $$t >/dev/null || { echo "MISSING: $$t"; fail=1; }; done; \
 	docker buildx version >/dev/null 2>&1 || { echo "MISSING: docker buildx"; fail=1; }; \
 	docker version >/dev/null 2>&1 || { echo "docker daemon not reachable"; fail=1; }; \
 	[ $$fail -eq 0 ] && echo "preflight OK" || exit 1
@@ -205,6 +229,7 @@ installer: checkout-talos | $(OUT_DIR) ## Bake the installer from the kernel and
 	@$(MAKE) -C $(TALOS_DIR) local-kernel local-initramfs \
 	  PKG_KERNEL=$(KERNEL_IMAGE) PLATFORM=linux/$(TARGET_ARCH) DEST=$(CURDIR)/$(CUSTOM_KERNEL_DIR) \
 	  TARGET_ARGS="--network=host"
+	@$(check-initramfs)
 	@{ \
 	  echo "arch: $(TARGET_ARCH)"; \
 	  echo "platform: metal"; \
