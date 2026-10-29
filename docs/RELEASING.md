@@ -25,7 +25,7 @@ ships patches for it.
 3. The pull request it opens changes only `CHANGELOG.md`. A bot opened it, so its checks wait for
    Approve workflows to run; the merge does not need them. Merge it.
 4. Only this push builds: the extensions and the installer for both arches, pushed as
-   `talos-installer:sha-<commit>`. Once the build succeeded the commit is tagged,
+   `talos-installer:sha-<commit>`. Once the build succeeds, the commit is tagged,
    that image is retagged as `talos-installer:<version>` by digest, and the GitHub Release is
    created, not marked latest, and marked pre-release for an alpha or beta. A failed build leaves
    no tag, so the same version can be released again after the fix.
