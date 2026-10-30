@@ -22,10 +22,15 @@ ships patches for it.
    on the release branch through a pull request (see the README, "Bumping").
 2. Run Actions, then Release PR, on the release branch with the version, such as `v1.14.5+sm.1`.
    It refuses a version that does not name the Talos release of `KERNEL_RELEASE`.
-3. The pull request it opens changes only `CHANGELOG.md`, so it runs no build. Merge it.
-4. The push tags the release commit, retags the `sha-<commit>` installer of the commit it was cut
-   from as `talos-installer:<version>`, and creates the GitHub Release, not marked latest. Nothing
-   is built, so this takes minutes.
+3. The pull request it opens changes only `CHANGELOG.md`. A bot opened it, so its checks wait for
+   Approve workflows to run; the merge does not need them. Merge it.
+4. Only this push builds: the extensions and the installer for both arches, pushed as
+   `talos-installer:sha-<commit>`. Once the build succeeds, the commit is tagged,
+   that image is retagged as `talos-installer:<version>` by digest, and the GitHub Release is
+   created, marked latest when it is the newest stable release, and pre-release for an alpha or
+   beta. A failed build leaves no tag, so the same version can be released again after the fix.
+
+Every other pull request and push checks the pins and builds nothing.
 
 ## Branching a new line
 
