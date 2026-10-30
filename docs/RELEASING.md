@@ -27,8 +27,8 @@ ships patches for it.
 4. Only this push builds: the extensions and the installer for both arches, pushed as
    `talos-installer:sha-<commit>`. Once the build succeeds, the commit is tagged,
    that image is retagged as `talos-installer:<version>` by digest, and the GitHub Release is
-   created, not marked latest, and marked pre-release for an alpha or beta. A failed build leaves
-   no tag, so the same version can be released again after the fix.
+   created, marked latest when it is the newest stable release, and pre-release for an alpha or
+   beta. A failed build leaves no tag, so the same version can be released again after the fix.
 
 Every other pull request and push checks the pins and builds nothing.
 
