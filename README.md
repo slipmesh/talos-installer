@@ -21,7 +21,12 @@ The inputs come by pin from two other repositories, built there and never rebuil
 
 The extensions are built with siderolabs/extensions' own bldr pipeline, at the tag of the Talos
 release `KERNEL_RELEASE` names; the installer is baked by the stock siderolabs imager of that
-release.
+release. Talos' own initramfs, with machined, is built from that release's source with
+`talos/*.patch` applied:
+
+| patch | why |
+| --- | --- |
+| `network-history-capacity.patch` | raises the resource event history of the `network` namespace from 1024 to 100,000 events: a burst of ~10k kernel routes from BIRD overruns 1024 and reboots the node ([siderolabs/talos#14679](https://github.com/siderolabs/talos/issues/14679)) |
 
 ## Layout
 
@@ -30,6 +35,7 @@ versions.env        every pin: kernel release, daemons image, pkgs, nftables, BI
 extensions/<name>/  overlaid onto the siderolabs/extensions checkout; router-bird and
                     router-bird-exporter are build stages of router
 pkgs/nftables-pkg/  overlaid onto the siderolabs/pkgs checkout, builds the static nft
+talos/*.patch       applied to the siderolabs/talos checkout the initramfs is built from
 docs/               per extension, and how the signed kernel gets in
 build/              (gitignored) the checkouts and the imager output
 ```
@@ -75,7 +81,9 @@ talosctl -n <node> upgrade --image ghcr.io/slipmesh/talos-installer:<release tag
 ## Bumping
 
 - **Talos patch:** release talos-kernel for it, then set `KERNEL_RELEASE` to that release. `AWG_REF`
-  and `PKGS` follow: `make check-pins` names the values it expects.
+  and `PKGS` follow: `make check-pins` names the values it expects. Every `talos/*.patch` has to
+  apply to the new release, `make checkout-talos` fails otherwise; drop a patch once the release
+  carries the fix.
 - **Daemons:** set `DAEMONS_IMAGE` to a newer `ghcr.io/slipmesh/talos-extensions` tag with its
   digest, from `docker buildx imagetools inspect <image>:<tag>`.
 - **nftables, libnftnl, libmnl, musl:** set the version, run `make hashes`, paste the values back.

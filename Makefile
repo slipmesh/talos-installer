@@ -72,6 +72,7 @@ NFTABLES_PKG_ARGS := \
 
 BUILD_DIR      := build
 TALOS_DIR      := $(BUILD_DIR)/talos
+TALOS_PATCHES  := $(sort $(wildcard talos/*.patch))
 PKGS_DIR       := $(BUILD_DIR)/pkgs
 EXTENSIONS_DIR := $(BUILD_DIR)/extensions
 OUT_DIR        := $(BUILD_DIR)/out-$(TARGET_ARCH)
@@ -135,12 +136,16 @@ check-version: ## Assert VERSION is a release of TALOS_VERSION, vX.Y.Z+sm.N.
 
 # The talos Makefile bakes TAG, REGISTRY and USERNAME into machined, which checks TAG against the
 # kubelet image: anything but the release breaks a node's config validation. This asks that
-# Makefile what it would build with, called the way `installer` calls it.
+# Makefile what it would build with, called the way `installer` calls it. Its own TAG comes from
+# `git describe --dirty`, which talos/*.patch turns into <release>-dirty, so TAG is passed.
+TALOS_BUILD_VARS := TAG=$(TALOS_VERSION)
+
 .PHONY: check-talos-build
 check-talos-build: checkout-talos ## Assert the Talos build gets its release as TAG and siderolabs' registry.
 	@for want in TAG=$(TALOS_VERSION) REGISTRY=ghcr.io USERNAME=siderolabs; do \
 	  var=$${want%%=*}; \
-	  got=$$($(MAKE) -s --no-print-directory -C $(TALOS_DIR) --eval='print-%: ; @echo $$($$*)' print-$$var); \
+	  got=$$($(MAKE) -s --no-print-directory -C $(TALOS_DIR) $(TALOS_BUILD_VARS) \
+	    --eval='print-%: ; @echo $$($$*)' print-$$var); \
 	  [ "$$got" = "$${want#*=}" ] || { echo "the Talos build would get $$var=$$got, want $${want#*=}"; exit 1; }; \
 	done
 	@echo "the Talos build gets TAG=$(TALOS_VERSION), ghcr.io/siderolabs"
@@ -181,12 +186,14 @@ checkout-extensions: | $(BUILD_DIR) ## Fetch siderolabs/extensions at the Talos 
 	@cp -r extensions/*/ $(EXTENSIONS_DIR)/
 
 .PHONY: checkout-talos
-checkout-talos: | $(BUILD_DIR) ## Fetch siderolabs/talos at the Talos release, for its kernel+initramfs recipe.
+checkout-talos: | $(BUILD_DIR) ## Fetch siderolabs/talos at the Talos release and apply talos/*.patch.
 	@if [ ! -d "$(TALOS_DIR)/.git" ]; then \
 	  git clone --filter=blob:none --quiet https://github.com/siderolabs/talos.git $(TALOS_DIR); \
 	fi
 	@git -C $(TALOS_DIR) fetch --quiet --filter=blob:none origin tag $(TALOS_VERSION)
 	@git -C $(TALOS_DIR) checkout --quiet --force --detach $(TALOS_VERSION)
+	@git -C $(TALOS_DIR) clean --quiet -fd
+	$(if $(TALOS_PATCHES),@git -C $(TALOS_DIR) apply $(addprefix $(CURDIR)/,$(TALOS_PATCHES)))
 
 ##@ Build (one arch)
 
@@ -221,7 +228,7 @@ installer: check-talos-build | $(OUT_DIR) ## Bake the installer from the kernel 
 	  > $(BASE_OCI_DIR)/index.json.tmp && mv $(BASE_OCI_DIR)/index.json.tmp $(BASE_OCI_DIR)/index.json
 	@echo "==> extracting kernel and initramfs from $(KERNEL_IMAGE)"
 	@mkdir -p $(CUSTOM_KERNEL_DIR)
-	@$(MAKE) -C $(TALOS_DIR) local-kernel local-initramfs \
+	@$(MAKE) -C $(TALOS_DIR) local-kernel local-initramfs $(TALOS_BUILD_VARS) \
 	  PKG_KERNEL=$(KERNEL_IMAGE) PLATFORM=linux/$(TARGET_ARCH) DEST=$(CURDIR)/$(CUSTOM_KERNEL_DIR) \
 	  TARGET_ARGS="--network=host"
 	@{ \
