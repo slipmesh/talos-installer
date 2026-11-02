@@ -1,0 +1,25 @@
+diff --git a/internal/app/machined/pkg/runtime/v1alpha2/v1alpha2_state.go b/internal/app/machined/pkg/runtime/v1alpha2/v1alpha2_state.go
+index 2009dbe87..363df009a 100644
+--- a/internal/app/machined/pkg/runtime/v1alpha2/v1alpha2_state.go
++++ b/internal/app/machined/pkg/runtime/v1alpha2/v1alpha2_state.go
+@@ -53,9 +53,19 @@ func NewState() (*State, error) {
+ 
+ 	s.resources = state.WrapCore(namespaced.NewState(
+ 		func(ns string) state.CoreState {
++			maxCapacity := 1024
++
++			// A routing daemon installing ~10k kernel routes at once outruns the RouteStatus
++			// consumer by more than 1024 events, and the overrun aborts the controller runtime
++			// (siderolabs/talos#14679). The ring grows on demand, so the cap costs memory only
++			// after such a burst.
++			if ns == network.NamespaceName {
++				maxCapacity = 100_000
++			}
++
+ 			return inmem.NewStateWithOptions(
+ 				inmem.WithHistoryInitialCapacity(8),
+-				inmem.WithHistoryMaxCapacity(1024),
++				inmem.WithHistoryMaxCapacity(maxCapacity),
+ 				inmem.WithHistoryGap(4),
+ 			)(ns)
+ 		},
