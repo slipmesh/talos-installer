@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and follows [Semantic Versioning](https://semver.org/).
 
+## [1.14.5+sm.3] - 2026-11-02
+
+### CI/CD ⚙️
+
+- Release-1.14 builds only the merged release PR, through slipmesh/.github@v2.1 (#15)
+- Release-1.14 promotes before tagging, through slipmesh/.github@v2.2 (#18)
+- Release-1.14 calls the shared workflows at slipmesh/.github@v2.3 (#20)
+
+### Fixed 🐛
+
+- Raise machined's network event history to 100k events (#23)
+
 ## [1.14.5+sm.2] - 2026-10-28
 
 ### Fixed 🐛
