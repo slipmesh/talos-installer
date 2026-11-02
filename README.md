@@ -68,12 +68,11 @@ another registry under the same tags.
 
 ## CI and releases
 
-Pull requests and pushes check the pins and run `make check-talos-build`, which applies
-`talos/*.patch`; they build nothing. Only the push of a merged release PR builds the four extensions
-and the installer for both arches, each on a runner of its own arch, against a registry local to the
-job, publishes them to ghcr.io as `sha-<commit>`, merges the installer into a multi-arch
-`ghcr.io/slipmesh/talos-installer:sha-<commit>`, then retags that installer as the release and tags
-the commit. See [RELEASING.md](docs/RELEASING.md). Then, per node:
+Pull requests and pushes check the pins and build nothing. Only the push of a merged release PR
+builds the four extensions and the installer for both arches, each on a runner of its own arch,
+against a registry local to the job, publishes them to ghcr.io as `sha-<commit>`, merges the
+installer into a multi-arch `ghcr.io/slipmesh/talos-installer:sha-<commit>`, then retags that
+installer as the release and tags the commit. See [RELEASING.md](docs/RELEASING.md). Then, per node:
 
 ```sh
 talosctl -n <node> upgrade --image ghcr.io/slipmesh/talos-installer:<release tag, + as ->
