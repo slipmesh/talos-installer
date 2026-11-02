@@ -32,7 +32,8 @@ ships patches for it.
    If a later step fails, Re-run failed jobs finishes the release while the run's artifacts last,
    14 days; a push whose release commit is already tagged builds nothing.
 
-Every other pull request and push checks the pins and builds nothing.
+Every other pull request and push checks the pins and runs `make check-talos-build`, which applies
+`talos/*.patch`; it builds nothing.
 
 ## Branching a new line
 

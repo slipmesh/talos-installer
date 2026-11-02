@@ -1,8 +1,9 @@
-# Pull requests and pushes check the pins; only a merged release PR is built, in its own run, and
-# released. That build makes the four extensions and the installer for both arches, each on a
-# runner of its own arch, against a registry local to the job, which the imager pulls from, then
-# copies them to ghcr.io as `sha-<commit>` for the release to retag. nftables-pkg is an input to the
-# nftables extension only and is never published.
+# Pull requests and pushes check the pins, and that talos/*.patch applies and the Talos build gets
+# the release as its TAG; only a merged release PR is built, in its own run, and released. That
+# build makes the four extensions and the installer for both arches, each on a runner of its own
+# arch, against a registry local to the job, which the imager pulls from, then copies them to
+# ghcr.io as `sha-<commit>` for the release to retag. nftables-pkg is an input to the nftables
+# extension only and is never published.
 name: CI
 
 on:
@@ -23,6 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: make check-pins
+      - run: make check-talos-build
 
   release-commit:
     if: github.event_name == 'push'
