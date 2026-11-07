@@ -8,12 +8,14 @@ counts releases against it. The image carries the same tag with `+` as `-`, sinc
 hold a `+`.
 
 Stable releases come only from `release-1.X` branches, one per Talos minor; `main` follows the next
-minor. A change lands on `main` first and is cherry-picked to the release branches it applies to
-(`git cherry-pick -x`, then a pull request into `release-1.X`). A line is supported while upstream
-ships patches for it.
+minor and releases only its pre-releases, named after the Talos pre-release they build for, such as
+`v1.15.0-alpha.2+sm.1`. A change lands on `main` first and is cherry-picked to the release branches
+it applies to (`git cherry-pick -x`, then a pull request into `release-1.X`). A line is supported
+while upstream ships patches for it.
 
 | Talos line | branch | status |
 | --- | --- | --- |
+| 1.15 | `main` | pre-releases only |
 | 1.14 | `release-1.14` | supported |
 
 ## Cutting a release

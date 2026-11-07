@@ -1,15 +1,23 @@
 diff --git a/internal/app/machined/pkg/runtime/v1alpha2/v1alpha2_state.go b/internal/app/machined/pkg/runtime/v1alpha2/v1alpha2_state.go
-index 2009dbe87..363df009a 100644
+index 2cf8385..9a59ce1 100644
 --- a/internal/app/machined/pkg/runtime/v1alpha2/v1alpha2_state.go
 +++ b/internal/app/machined/pkg/runtime/v1alpha2/v1alpha2_state.go
-@@ -53,9 +53,19 @@ func NewState() (*State, error) {
+@@ -17,6 +17,7 @@ import (
+ 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+ 	"github.com/siderolabs/talos/pkg/machinery/resources"
+ 	"github.com/siderolabs/talos/pkg/machinery/resources/config"
++	"github.com/siderolabs/talos/pkg/machinery/resources/network"
+ )
  
- 	s.resources = state.WrapCore(namespaced.NewState(
+ // State implements runtime.V1alpha2State interface.
+@@ -35,9 +36,19 @@ func NewState() (*State, error) {
+ 
+ 	s.resources = state.WrapCore(ctrltrace.WrapState(namespaced.NewState(
  		func(ns string) state.CoreState {
-+			maxCapacity := 1024
++			maxCapacity := 1536
 +
 +			// A routing daemon installing ~10k kernel routes at once outruns the RouteStatus
-+			// consumer by more than 1024 events, and the overrun aborts the controller runtime
++			// consumer by more than 1536 events, and the overrun aborts the controller runtime
 +			// (siderolabs/talos#14679). The ring grows on demand, so the cap costs memory only
 +			// after such a burst.
 +			if ns == network.NamespaceName {
@@ -18,7 +26,7 @@ index 2009dbe87..363df009a 100644
 +
  			return inmem.NewStateWithOptions(
  				inmem.WithHistoryInitialCapacity(8),
--				inmem.WithHistoryMaxCapacity(1024),
+-				inmem.WithHistoryMaxCapacity(1536),
 +				inmem.WithHistoryMaxCapacity(maxCapacity),
  				inmem.WithHistoryGap(4),
  			)(ns)
