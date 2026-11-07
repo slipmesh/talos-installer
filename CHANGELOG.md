@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and follows [Semantic Versioning](https://semver.org/).
 
+## [1.15.0-alpha.2+sm.1] - 2026-11-07
+
+### Build system 🛠️
+
+- Take the daemons from talos-extensions v1.14.5+sm.2 (#27)
+- Move to Talos v1.15.0-alpha.2 (#31)
+
+### CI/CD ⚙️
+
+- Build only the merged release PR, through the v2 shared workflows (#13)
+- Mark the newest stable release latest, through slipmesh/.github@v2.1 (#14)
+- Promote before tagging, through slipmesh/.github@v2.2 (#17)
+- Call the shared workflows at slipmesh/.github@v2.3 (#19)
+- Call the shared workflows at slipmesh/.github@v2.4 (#25)
+
+### Documentation 📚
+
+- Tag alpha.0 when branching a line, and how to withdraw a broken release (#16)
+
+### Fixed 🐛
+
+- Keep this build's variables out of the Talos build (#10)
+- Raise machined's network event history to 100k events (#22)
+
+## [1.15.0-alpha.0] - 2026-10-28
+
+### Added ✨
+
+- Build the awg, router and nftables extensions here (#5)
+- Build against Talos v1.14.5 (#8)
+
+### CI/CD ⚙️
+
+- Release from release-* branches, named after the Talos release (#6)
+- Skip the build for Markdown-only changes (#7)
+
+### Documentation 📚
+
+- Say what the base image does not supply
+
+### Fixed 🐛
+
+- Take the base from installer-base, not installer
+
+### Miscellaneous 🧹
+
+- Bump talos to v1.14.0
+- Bump talos to v1.14.2
+- Build against Talos v1.14.4
+
 ## [0.1.1] - 2026-08-27
 
 ### CI/CD ⚙️
