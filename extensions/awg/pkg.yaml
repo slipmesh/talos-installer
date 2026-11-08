@@ -13,7 +13,16 @@ steps:
         mkdir -p /rootfs/usr/local/lib/containers/awg /rootfs/usr/local/etc/containers
         install -m 0755 /usr/local/bin/awg /rootfs/usr/local/lib/containers/awg/awg
         cp /usr/local/etc/containers/awg.yaml /rootfs/usr/local/etc/containers/awg.yaml
+        mkdir -p /rootfs/usr/local/share/licenses/awg
+        cp -r /usr/share/licenses/talos-extensions /rootfs/usr/local/share/licenses/awg/
     test:
+      - |
+        # The daemon links crates, the Rust standard library and musl statically, and their
+        # licenses hold only if the notices reach the node with it.
+        for notice in THIRD-PARTY-NOTICES COPYRIGHT-rust-std.html COPYRIGHT-musl; do
+          file=/rootfs/usr/local/share/licenses/awg/talos-extensions/$notice
+          test -s "$file" || { echo "missing $file"; exit 1; }
+        done
       - |
         mkdir -p /extensions-validator-rootfs
         cp -r /rootfs/ /extensions-validator-rootfs/rootfs
