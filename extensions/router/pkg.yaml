@@ -25,7 +25,6 @@ steps:
         install -m 0755 /usr/local/bin/router /rootfs/usr/local/lib/containers/router/router
         mkdir -p /rootfs/usr/local/etc/containers
         cp /usr/local/etc/containers/router.yaml /rootfs/usr/local/etc/containers/router.yaml
-        mkdir -p /rootfs/usr/local/share/licenses/router
         cp -r /usr/share/licenses/talos-extensions /rootfs/usr/local/share/licenses/router/
     test:
       - |

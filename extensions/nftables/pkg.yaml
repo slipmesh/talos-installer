@@ -20,7 +20,6 @@ steps:
         cp -r /usr/local/share/licenses/nftables /rootfs/usr/local/share/licenses/
         install -m 0755 /usr/local/bin/nftables /rootfs/usr/local/lib/containers/nftables/nftables
         cp /usr/local/etc/containers/nftables.yaml /rootfs/usr/local/etc/containers/nftables.yaml
-        mkdir -p /rootfs/usr/local/share/licenses/nftables
         cp -r /usr/share/licenses/talos-extensions /rootfs/usr/local/share/licenses/nftables/
     test:
       - |
