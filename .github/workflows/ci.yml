@@ -1,8 +1,9 @@
-# Pull requests and pushes check the pins; only a merged release PR is built, in its own run, and
-# released. That build makes the four extensions and the installer for both arches, each on a
-# runner of its own arch, against a registry local to the job, which the imager pulls from, then
-# copies them to ghcr.io as `sha-<commit>` for the release to retag. nftables-pkg is an input to the
-# nftables extension only and is never published.
+# Pull requests and pushes check the pins and run tests/; only a merged release PR is built, in its
+# own run, and released. That build makes the four extensions and the installer for both arches,
+# each on a runner of its own arch, against a registry local to the job, which the imager pulls
+# from, then copies them to ghcr.io as `sha-<commit>` for the release to retag, along with an
+# imager carrying both arches' kernels. nftables-pkg is an input to the nftables extension only and
+# is never published.
 name: CI
 
 on:
@@ -89,6 +90,12 @@ jobs:
           make publish TARGET_ARCH=${{ matrix.arch }} TAG=sha-${{ github.sha }} \
             REGISTRY=localhost:5000 PUBLISH_REGISTRY=ghcr.io/slipmesh
 
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: kernel-${{ matrix.arch }}
+          path: build/out-${{ matrix.arch }}/custom-kernel/
+          if-no-files-found: error
+
   manifest:
     needs: build
     runs-on: ubuntu-26.04
@@ -109,6 +116,37 @@ jobs:
       - name: Combine both arches into the installer nodes pull
         run: make manifest TAG=sha-${{ github.sha }} REGISTRY=ghcr.io/slipmesh
 
+  # The stock imager with both arches' kernels, for the disk images a first install writes.
+  imager:
+    needs: [release-commit, build]
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: kernel-*
+          merge-multiple: true
+          path: build/kernels
+
+      - name: Publish the imager
+        env:
+          VERSION: ${{ needs.release-commit.outputs.version }}
+        run: make imager TAG=sha-${{ github.sha }} REGISTRY=ghcr.io/slipmesh VERSION="$VERSION"
+
   promote:
     needs: [release-commit, manifest]
     uses: slipmesh/.github/.github/workflows/promote.yml@v2.4
@@ -118,8 +156,18 @@ jobs:
     with:
       tag: ${{ needs.release-commit.outputs.version }}
 
+  promote-imager:
+    needs: [release-commit, imager]
+    uses: slipmesh/.github/.github/workflows/promote.yml@v2.4
+    permissions:
+      contents: read
+      packages: write
+    with:
+      image: ghcr.io/slipmesh/imager
+      tag: ${{ needs.release-commit.outputs.version }}
+
   tag:
-    needs: [release-commit, promote]
+    needs: [release-commit, promote, promote-imager]
     uses: slipmesh/.github/.github/workflows/tag-release.yml@v2.4
     permissions:
       contents: write
