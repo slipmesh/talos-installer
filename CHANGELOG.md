@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and follows [Semantic Versioning](https://semver.org/).
 
+## [1.15.0-alpha.2+sm.3] - 2026-11-09
+
+### Build system 🛠️
+
+- Take the daemons from talos-extensions v1.15.0-alpha.2+sm.3 (#36)
+
+### Miscellaneous 🧹
+
+- Name slipmesh contributors as the copyright holder in LICENSE-MIT (#35)
+
 ## [1.15.0-alpha.2+sm.2] - 2026-11-08
 
 ### Fixed 🐛
