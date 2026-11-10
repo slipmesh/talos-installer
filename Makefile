@@ -20,7 +20,7 @@ unexport $(foreach v,$(.VARIABLES),$(if $(filter command line,$(origin $(v))),$(
 
 _GOALS := $(or $(MAKECMDGOALS),$(.DEFAULT_GOAL))
 ifeq ($(TARGET_ARCH),)
-  ifneq ($(filter-out help print-config check-pins check-version check-talos-build hashes manifest clean distclean checkout-%,$(_GOALS)),)
+  ifneq ($(filter-out help print-config check-pins check-version check-talos-build hashes manifest imager clean distclean checkout-%,$(_GOALS)),)
     $(error TARGET_ARCH not set - pass TARGET_ARCH=amd64 or TARGET_ARCH=arm64)
   endif
 endif
@@ -49,6 +49,7 @@ EXTENSION_IMAGES   := $(foreach e,$(EXTENSIONS),$(REGISTRY)/$(e):$(TAG)-$(TARGET
 NFTABLES_PKG_IMAGE := $(REGISTRY)/nftables-pkg:$(TAG)-$(TARGET_ARCH)
 INSTALLER_IMAGE    := $(REGISTRY)/talos-installer:$(TAG)-$(TARGET_ARCH)
 MANIFEST_IMAGE     := $(REGISTRY)/talos-installer:$(TAG)
+IMAGER_IMAGE       := $(REGISTRY)/imager:$(TAG)
 ARCHS              := amd64 arm64
 
 # extensions-validator accepts only a few version shapes: `<semver>-v<talos>`, as zfs upstream
@@ -85,6 +86,13 @@ IMAGER            := ghcr.io/siderolabs/imager:$(TALOS_VERSION)
 BASE_INSTALLER    := ghcr.io/siderolabs/installer-base:$(TALOS_VERSION)
 BASE_OCI_DIR      := $(OUT_DIR)/base-oci
 CUSTOM_KERNEL_DIR := $(OUT_DIR)/custom-kernel
+
+# `make imager` takes both arches' kernel and initramfs from here, as `make installer` leaves them in
+# each arch's CUSTOM_KERNEL_DIR. Its labels name the installer a release retags, or this build's
+# manifest without a VERSION.
+KERNELS_DIR      ?= $(BUILD_DIR)/kernels
+IMAGER_OUTPUT    ?= type=registry
+IMAGER_INSTALLER := $(REGISTRY)/talos-installer:$(if $(VERSION),$(subst +,-,$(VERSION)),$(TAG))
 
 ##@ General
 
@@ -282,6 +290,14 @@ publish: ## Copy this arch's extensions and installer from REGISTRY to PUBLISH_R
 manifest: ## Combine both arches' pushed installers into the multi-arch tag nodes pull.
 	@docker buildx imagetools create -t $(MANIFEST_IMAGE) $(foreach a,$(ARCHS),$(REGISTRY)/talos-installer:$(TAG)-$(a))
 	@echo "upgrade a node with: talosctl -n <node> upgrade --image $(MANIFEST_IMAGE)"
+
+.PHONY: imager
+imager: ## Publish the stock imager with both arches' kernels from KERNELS_DIR, for disk images.
+	@docker buildx build --platform=$(shell echo $(addprefix linux/,$(ARCHS)) | tr " " ,) \
+	  --build-arg=IMAGER=$(IMAGER) --label=dev.slipmesh.installer=$(IMAGER_INSTALLER) \
+	  $(foreach a,$(ARCHS),--label="dev.slipmesh.extensions.$(a)=$(foreach e,$(EXTENSIONS),$(REGISTRY)/$(e):$(TAG)-$(a))") \
+	  --tag=$(IMAGER_IMAGE) --output=$(IMAGER_OUTPUT) -f imager/Dockerfile $(KERNELS_DIR)
+	@echo "built $(IMAGER_IMAGE) for $(IMAGER_INSTALLER)"
 
 ##@ Maintenance
 

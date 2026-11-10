@@ -24,8 +24,22 @@ modules signed with siderolabs' key, `virtio_pci.ko` among them, which this kern
 The stock `ghcr.io/siderolabs/imager` then bakes the installer, unmodified. It reads
 `input.kernel.path` and `input.initramfs.path` from its own filesystem, so `make installer`
 bind-mounts the two files over `/usr/install/<arch>/`. The rootfs, sd-boot, sd-stub and system
-extensions come out exactly as stock imager assembles them, and no custom imager image is built
-or published.
+extensions come out exactly as stock imager assembles them.
+
+A disk image for a first install needs the same two files, and its META differs per host, so it
+is built where the host is installed, not here. For that a release also publishes
+`ghcr.io/slipmesh/imager:<release tag>`: the stock imager with both arches' files copied over its
+own (`imager/Dockerfile`), so the disk image boots the release's kernel from the start. Its labels
+name what the image belongs with:
+
+| label | value |
+| --- | --- |
+| `dev.slipmesh.installer` | the release's installer, `ghcr.io/slipmesh/talos-installer:<release tag>` |
+| `dev.slipmesh.extensions.<arch>` | the release's four extension images for that arch, space-separated |
+
+```sh
+docker image inspect ghcr.io/slipmesh/imager:<release tag> --format '{{json .Config.Labels}}'
+```
 
 ## Verifying on a node
 

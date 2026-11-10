@@ -36,6 +36,8 @@ extensions/<name>/  overlaid onto the siderolabs/extensions checkout; router-bir
                     router-bird-exporter are build stages of router
 pkgs/nftables-pkg/  overlaid onto the siderolabs/pkgs checkout, builds the static nft
 talos/*.patch       applied to the siderolabs/talos checkout the initramfs is built from
+imager/Dockerfile   the stock imager with this release's kernels, for first-install disk images
+tests/              `make imager`'s output, checked with stand-in kernels; CI runs them
 docs/               per extension, and how the signed kernel gets in
 build/              (gitignored) the checkouts and the imager output
 ```
@@ -51,6 +53,9 @@ make check-pins                       # pins agree with KERNEL_RELEASE and its T
 make extensions TARGET_ARCH=amd64     # build and push the four extensions
 make installer push TARGET_ARCH=amd64 # bake and push this arch's installer
 make manifest                         # combine both arches into the tag nodes pull
+make imager                           # publish the imager with both arches' kernels from
+                                      # build/kernels (vmlinuz-<arch>, initramfs-<arch>.xz)
+tests/imager.sh                       # check make imager with stand-in kernels
 ```
 
 Images go to `REGISTRY` (default `ghcr.io/slipmesh`) and are tagged `TAG`, by default
@@ -68,11 +73,12 @@ another registry under the same tags.
 
 ## CI and releases
 
-Pull requests and pushes check the pins and build nothing. Only the push of a merged release PR
-builds the four extensions and the installer for both arches, each on a runner of its own arch,
-against a registry local to the job, publishes them to ghcr.io as `sha-<commit>`, merges the
-installer into a multi-arch `ghcr.io/slipmesh/talos-installer:sha-<commit>`, then retags that
-installer as the release and tags the commit. See [RELEASING.md](docs/RELEASING.md). Then, per node:
+Pull requests and pushes check the pins and run `tests/`, and build nothing else. Only the push of a
+merged release PR builds the four extensions and the installer for both arches, each on a runner of
+its own arch, against a registry local to the job, publishes them to ghcr.io as `sha-<commit>`,
+merges the installer into a multi-arch `ghcr.io/slipmesh/talos-installer:sha-<commit>`, publishes
+the imager with both arches' kernels as `ghcr.io/slipmesh/imager:sha-<commit>`, then retags both as
+the release and tags the commit. See [RELEASING.md](docs/RELEASING.md). Then, per node:
 
 ```sh
 talosctl -n <node> upgrade --image ghcr.io/slipmesh/talos-installer:<release tag, + as ->
