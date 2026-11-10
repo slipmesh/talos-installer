@@ -7,6 +7,11 @@ Talos release is the one `KERNEL_RELEASE` names. The revision starts at 1 for ev
 counts releases against it. The image carries the same tag with `+` as `-`, since OCI tags cannot
 hold a `+`.
 
+The release is also the Talos build's own version, so a node reports it: `talosctl version` and the
+node's OS image in `kubectl get node -o wide` show `v1.14.5+sm.1`. Talos compares only the release
+before the `+` against the kubelet image and the extensions' constraints. A build without a
+`VERSION` reports the Talos release alone.
+
 Stable releases come only from `release-1.X` branches, one per Talos minor; `main` follows the next
 minor and releases only its pre-releases, named after the Talos pre-release they build for, such as
 `v1.15.0-alpha.2+sm.1`. A change lands on `main` first and is cherry-picked to the release branches
