@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and follows [Semantic Versioning](https://semver.org/).
 
+## [1.15.0-alpha.2+sm.4] - 2026-11-10
+
+### Added ✨
+
+- Publish an imager with the slipmesh kernel alongside the installer (#38)
+
+### Build system 🛠️
+
+- Take the daemons from talos-extensions v1.15.0-alpha.2+sm.4 (#39)
+
 ## [1.15.0-alpha.2+sm.3] - 2026-11-09
 
 ### Build system 🛠️
