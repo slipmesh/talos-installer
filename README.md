@@ -10,6 +10,13 @@ installer image that nodes upgrade to:
 | `router` | `ext-router` with a static BIRD and bird_exporter | [router.md](docs/router.md) |
 | `nftables` | the nftables ruleset service with a static `nft` | [nftables.md](docs/nftables.md) |
 
+A host with hardware the fleet lacks takes an installer variant, `talos-installer-<variant>`: the
+same installer with one more extension.
+
+| variant | adds | for |
+| --- | --- | --- |
+| `amdgpu` | `amdgpu`: the amdgpu and amdxcp modules from talos-kernel's kernel, and the amdgpu firmware of the Talos release's linux-firmware | hosts with an AMD GPU, integrated ones included |
+
 The inputs come by pin from two other repositories, built there and never rebuilt here:
 
 - [talos-kernel](https://github.com/slipmesh/talos-kernel): the signed kernel and the
@@ -37,7 +44,8 @@ extensions/<name>/  overlaid onto the siderolabs/extensions checkout; router-bir
 pkgs/nftables-pkg/  overlaid onto the siderolabs/pkgs checkout, builds the static nft
 talos/*.patch       applied to the siderolabs/talos checkout the initramfs is built from
 imager/Dockerfile   the stock imager with this release's kernels, for first-install disk images
-tests/              the imager image and the Talos build's tag, checked without a build; CI runs them
+extensions/drm/amdgpu/ the amdgpu variant's extension, upstream's with talos-kernel's modules
+tests/              the imager image, the Talos build's tag and the amdgpu extension; CI runs them
 docs/               per extension, and how the signed kernel gets in
 build/              (gitignored) the checkouts and the imager output
 ```
@@ -50,12 +58,14 @@ other arch, buildx emulates it under QEMU.
 ```sh
 make print-config TARGET_ARCH=amd64   # resolved pins and image names
 make check-pins                       # pins agree with KERNEL_RELEASE and its Talos release
-make extensions TARGET_ARCH=amd64     # build and push the four extensions
+make extensions TARGET_ARCH=amd64     # build and push the extensions, the variants' too
 make installer push TARGET_ARCH=amd64 # bake and push this arch's installer
-make manifest                         # combine both arches into the tag nodes pull
+make installer-variants TARGET_ARCH=amd64 # bake and push this arch's installer variants
+make manifest                         # combine both arches into the tags nodes pull
 make imager                           # publish the imager with both arches' kernels from
                                       # build/kernels (vmlinuz-<arch>, initramfs-<arch>.xz)
 tests/imager.sh                       # check make imager with stand-in kernels
+TEST_REGISTRY=localhost:5000 tests/amdgpu.sh # build the amdgpu extension, compare its modules
 ```
 
 Images go to `REGISTRY` (default `ghcr.io/slipmesh`) and are tagged `TAG`, by default
@@ -74,11 +84,13 @@ another registry under the same tags.
 ## CI and releases
 
 Pull requests and pushes check the pins and run `tests/`, and build nothing else. Only the push of a
-merged release PR builds the four extensions and the installer for both arches, each on a runner of
-its own arch, against a registry local to the job, publishes them to ghcr.io as `sha-<commit>`,
-merges the installer into a multi-arch `ghcr.io/slipmesh/talos-installer:sha-<commit>`, publishes
-the imager with both arches' kernels as `ghcr.io/slipmesh/imager:sha-<commit>`, then retags both as
-the release and tags the commit. See [RELEASING.md](docs/RELEASING.md). Then, per node:
+merged release PR builds the extensions, the installer and its variants for both arches, each on a
+runner of its own arch, against a registry local to the job, publishes them to ghcr.io as
+`sha-<commit>`, merges each installer into a multi-arch `ghcr.io/slipmesh/<installer>:sha-<commit>`,
+publishes the imager with both arches' kernels as `ghcr.io/slipmesh/imager:sha-<commit>`, then
+retags the installers and the imager as the release and tags the commit. See
+[RELEASING.md](docs/RELEASING.md). Then, per node, with `talos-installer-<variant>` for a host that
+takes one:
 
 ```sh
 talosctl -n <node> upgrade --image ghcr.io/slipmesh/talos-installer:<release tag, + as ->

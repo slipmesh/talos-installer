@@ -31,14 +31,14 @@ while upstream ships patches for it.
    It refuses a version that does not name the Talos release of `KERNEL_RELEASE`.
 3. The pull request it opens changes only `CHANGELOG.md`. The push of the merge checks the pins
    again, so it does not wait on this pull request's. Merge it.
-4. Only this push builds: the extensions and the installer for both arches, pushed as
-   `talos-installer:sha-<commit>`, and the imager with both arches' kernels as
-   `imager:sha-<commit>`. Once the build succeeds, both are retagged as `<version>` by digest, the
-   commit is tagged, and the GitHub Release is created, marked latest when it is the newest stable
-   release, and pre-release for an alpha or beta. A failed build leaves no tag, so the same version
-   can be released again after the fix. If a later step fails, Re-run failed jobs finishes the
-   release while the run's artifacts last, 14 days; a push whose release commit is already tagged
-   builds nothing.
+4. Only this push builds: the extensions, the installer and its variants for both arches, pushed as
+   `talos-installer:sha-<commit>` and `talos-installer-<variant>:sha-<commit>`, and the imager with
+   both arches' kernels as `imager:sha-<commit>`. Once the build succeeds, each is retagged as
+   `<version>` by digest, the commit is tagged, and the GitHub Release is created, marked latest
+   when it is the newest stable release, and pre-release for an alpha or beta. A failed build leaves
+   no tag, so the same version can be released again after the fix. If a later step fails, Re-run
+   failed jobs finishes the release while the run's artifacts last, 14 days; a push whose release
+   commit is already tagged builds nothing.
 
 Every other pull request and push checks the pins, runs `tests/` and builds nothing else.
 
