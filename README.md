@@ -37,7 +37,7 @@ extensions/<name>/  overlaid onto the siderolabs/extensions checkout; router-bir
 pkgs/nftables-pkg/  overlaid onto the siderolabs/pkgs checkout, builds the static nft
 talos/*.patch       applied to the siderolabs/talos checkout the initramfs is built from
 imager/Dockerfile   the stock imager with this release's kernels, for first-install disk images
-tests/              `make imager`'s output, checked with stand-in kernels; CI runs them
+tests/              the imager image and the Talos build's tag, checked without a build; CI runs them
 docs/               per extension, and how the signed kernel gets in
 build/              (gitignored) the checkouts and the imager output
 ```

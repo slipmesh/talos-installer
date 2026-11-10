@@ -142,21 +142,25 @@ check-version: ## Assert VERSION is a release of TALOS_VERSION, vX.Y.Z+sm.N.
 	  || { echo "VERSION must be $(TALOS_VERSION)+sm.<N>, got '$(VERSION)'"; exit 1; }
 	@echo "$(VERSION) releases Talos $(TALOS_VERSION)"
 
-# The talos Makefile bakes TAG, REGISTRY and USERNAME into machined, which checks TAG against the
-# kubelet image: anything but the release breaks a node's config validation. This asks that
-# Makefile what it would build with, called the way `installer` calls it. Its own TAG comes from
-# `git describe --dirty`, which talos/*.patch turns into <release>-dirty, so TAG is passed.
-TALOS_BUILD_VARS := TAG=$(TALOS_VERSION)
+# The talos Makefile bakes TAG, REGISTRY and USERNAME into machined. machined parses TAG as semver
+# to validate the kubelet image against its Talos minor and the extensions against their Talos
+# constraint, and reports it as the node's version. A release passes its VERSION, v<talos>+sm.<n>:
+# build metadata leaves both checks as for the Talos release. Without VERSION it is the release
+# itself, since the talos checkout's own `git describe --dirty` turns talos/*.patch into -dirty.
+# This asks that Makefile what it would build with, called the way `installer` calls it.
+TALOS_TAG        := $(or $(VERSION),$(TALOS_VERSION))
+TALOS_BUILD_VARS := TAG=$(TALOS_TAG)
 
 .PHONY: check-talos-build
 check-talos-build: checkout-talos ## Assert the Talos build gets its release as TAG and siderolabs' registry.
-	@for want in TAG=$(TALOS_VERSION) REGISTRY=ghcr.io USERNAME=siderolabs; do \
+	$(if $(VERSION),@$(MAKE) -s --no-print-directory check-version VERSION=$(VERSION) >/dev/null)
+	@for want in TAG=$(TALOS_TAG) REGISTRY=ghcr.io USERNAME=siderolabs; do \
 	  var=$${want%%=*}; \
 	  got=$$($(MAKE) -s --no-print-directory -C $(TALOS_DIR) $(TALOS_BUILD_VARS) \
 	    --eval='print-%: ; @echo $$($$*)' print-$$var); \
 	  [ "$$got" = "$${want#*=}" ] || { echo "the Talos build would get $$var=$$got, want $${want#*=}"; exit 1; }; \
 	done
-	@echo "the Talos build gets TAG=$(TALOS_VERSION), ghcr.io/siderolabs"
+	@echo "the Talos build gets TAG=$(TALOS_TAG), ghcr.io/siderolabs"
 
 .PHONY: preflight
 preflight: ## Check this machine can run the build.
