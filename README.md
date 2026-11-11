@@ -21,12 +21,9 @@ The inputs come by pin from two other repositories, built there and never rebuil
 
 The extensions are built with siderolabs/extensions' own bldr pipeline, at the tag of the Talos
 release `KERNEL_RELEASE` names; the installer is baked by the stock siderolabs imager of that
-release. Talos' own initramfs, with machined, is built from that release's source with
-`talos/*.patch` applied:
-
-| patch | why |
-| --- | --- |
-| `network-history-capacity.patch` | raises the resource event history of the `network` namespace from 1024 to 100,000 events: a burst of ~10k kernel routes from BIRD overruns 1024 and reboots the node ([siderolabs/talos#14679](https://github.com/siderolabs/talos/issues/14679)) |
+release. Talos' own initramfs, with machined, is built from that release's source, so that a
+node reports the release as its version (see [RELEASING.md](docs/RELEASING.md)). A fix Talos does
+not carry yet goes in as `talos/<name>.patch`, applied to that source; there is none at present.
 
 ## Layout
 
@@ -35,7 +32,7 @@ versions.env        every pin: kernel release, daemons image, pkgs, nftables, BI
 extensions/<name>/  overlaid onto the siderolabs/extensions checkout; router-bird and
                     router-bird-exporter are build stages of router
 pkgs/nftables-pkg/  overlaid onto the siderolabs/pkgs checkout, builds the static nft
-talos/*.patch       applied to the siderolabs/talos checkout the initramfs is built from
+talos/*.patch       applied to the siderolabs/talos checkout the initramfs is built from, if any
 imager/Dockerfile   the stock imager with this release's kernels, for first-install disk images
 tests/              the imager image and the Talos build's tag, checked without a build; CI runs them
 docs/               per extension, and how the signed kernel gets in
