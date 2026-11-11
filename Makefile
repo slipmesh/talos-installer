@@ -45,10 +45,17 @@ DAEMONS_DIGEST := $(lastword $(subst @sha256:, ,$(DAEMONS_IMAGE)))
 TAG ?= sha-$(shell git rev-parse HEAD 2>/dev/null)
 
 EXTENSIONS         := amneziawg awg router nftables
-EXTENSION_IMAGES   := $(foreach e,$(EXTENSIONS),$(REGISTRY)/$(e):$(TAG)-$(TARGET_ARCH))
+# An installer variant talos-installer-<v> carries extension <v> on top of EXTENSIONS, for the hosts
+# with the hardware it drives; `make installer-<v>` bakes one through INSTALLER_NAME and
+# INSTALLER_EXTRA.
+INSTALLER_VARIANTS := amdgpu
+INSTALLER_NAME     ?= talos-installer
+INSTALLER_EXTRA    ?=
+EXTENSION_IMAGES   := $(foreach e,$(EXTENSIONS) $(INSTALLER_EXTRA),$(REGISTRY)/$(e):$(TAG)-$(TARGET_ARCH))
+INSTALLERS         := talos-installer $(addprefix talos-installer-,$(INSTALLER_VARIANTS))
 NFTABLES_PKG_IMAGE := $(REGISTRY)/nftables-pkg:$(TAG)-$(TARGET_ARCH)
-INSTALLER_IMAGE    := $(REGISTRY)/talos-installer:$(TAG)-$(TARGET_ARCH)
-MANIFEST_IMAGE     := $(REGISTRY)/talos-installer:$(TAG)
+INSTALLER_IMAGE    := $(REGISTRY)/$(INSTALLER_NAME):$(TAG)-$(TARGET_ARCH)
+MANIFEST_IMAGE     := $(REGISTRY)/$(INSTALLER_NAME):$(TAG)
 IMAGER_IMAGE       := $(REGISTRY)/imager:$(TAG)
 ARCHS              := amd64 arm64
 
@@ -61,7 +68,8 @@ VERSION_router    := $(DAEMONS_SHORT)-$(TALOS_VERSION)-bird$(BIRD_VERSION)
 VERSION_nftables  := $(DAEMONS_SHORT)-$(TALOS_VERSION)-nft$(NFTABLES_VERSION)
 
 # bldr renders every pkg.yaml in the tree whichever target it builds, so each build gets them all.
-EXTENSION_ARGS := --build-arg=AMNEZIAWG_PKG=$(AMNEZIAWG_PKG) --build-arg=DAEMONS=$(DAEMONS_IMAGE) \
+EXTENSION_ARGS := --build-arg=KERNEL=$(KERNEL_IMAGE) \
+                  --build-arg=AMNEZIAWG_PKG=$(AMNEZIAWG_PKG) --build-arg=DAEMONS=$(DAEMONS_IMAGE) \
                   --build-arg=NFTABLES_PKG=$(NFTABLES_PKG_IMAGE) --build-arg=BIRD_REV=$(BIRD_REV) \
                   --build-arg=BIRD_COMMIT=$(BIRD_COMMIT) --build-arg=BIRD_EXPORTER_REV=$(BIRD_EXPORTER_REV)
 
@@ -223,7 +231,7 @@ extension-%: checkout-extensions ## Build and push one extension: extension-amne
 extension-nftables: nftables-pkg
 
 .PHONY: extensions
-extensions: $(addprefix extension-,$(EXTENSIONS)) ## Build and push all four extensions.
+extensions: $(addprefix extension-,$(EXTENSIONS) $(INSTALLER_VARIANTS)) ## Build and push the extensions, the variants' too.
 
 # local-kernel/local-initramfs rather than the bare kernel/initramfs targets, which do not forward
 # TARGET_ARGS. --network=host only matters for a build of a foreign arch: talos' own Dockerfile
@@ -278,6 +286,14 @@ installer: check-talos-build | $(OUT_DIR) ## Bake the installer from the kernel 
 push: ## Push this arch's installer to REGISTRY.
 	@docker push -q $(INSTALLER_IMAGE)
 
+# Command-line variables are not passed on (MAKEOVERRIDES above), so the ones a build takes are.
+installer-%: ## Bake and push installer variant talos-installer-%: the installer plus extension %.
+	@$(MAKE) --no-print-directory installer push TARGET_ARCH=$(TARGET_ARCH) TAG=$(TAG) \
+	  REGISTRY=$(REGISTRY) $(if $(VERSION),VERSION=$(VERSION)) INSTALLER_NAME=talos-installer-$* INSTALLER_EXTRA=$*
+
+.PHONY: installer-variants
+installer-variants: $(addprefix installer-,$(INSTALLER_VARIANTS)) ## Bake and push every installer variant.
+
 ##@ Publish
 
 # The imager pulls the extensions from a container of its own, without the host's registry
@@ -285,14 +301,14 @@ push: ## Push this arch's installer to REGISTRY.
 .PHONY: publish
 publish: ## Copy this arch's extensions and installer from REGISTRY to PUBLISH_REGISTRY.
 	@[ -n "$(PUBLISH_REGISTRY)" ] || { echo "PUBLISH_REGISTRY not set"; exit 1; }
-	@for name in $(EXTENSIONS) talos-installer; do \
+	@for name in $(EXTENSIONS) $(INSTALLER_VARIANTS) $(INSTALLERS); do \
 	  src=$(REGISTRY)/$$name:$(TAG)-$(TARGET_ARCH); dst=$(PUBLISH_REGISTRY)/$$name:$(TAG)-$(TARGET_ARCH); \
 	  docker pull -q "$$src" >/dev/null; docker tag "$$src" "$$dst"; docker push -q "$$dst"; \
 	done
 
 .PHONY: manifest
-manifest: ## Combine both arches' pushed installers into the multi-arch tag nodes pull.
-	@docker buildx imagetools create -t $(MANIFEST_IMAGE) $(foreach a,$(ARCHS),$(REGISTRY)/talos-installer:$(TAG)-$(a))
+manifest: ## Combine both arches' pushed installers, the variants' too, into the multi-arch tags nodes pull.
+	@$(foreach i,$(INSTALLERS),docker buildx imagetools create -t $(REGISTRY)/$(i):$(TAG) $(foreach a,$(ARCHS),$(REGISTRY)/$(i):$(TAG)-$(a));)
 	@echo "upgrade a node with: talosctl -n <node> upgrade --image $(MANIFEST_IMAGE)"
 
 .PHONY: imager

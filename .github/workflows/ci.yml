@@ -1,7 +1,7 @@
 # Pull requests and pushes check the pins and run tests/; only a merged release PR is built, in its
-# own run, and released. That build makes the four extensions and the installer for both arches,
-# each on a runner of its own arch, against a registry local to the job, which the imager pulls
-# from, then copies them to ghcr.io as `sha-<commit>` for the release to retag, along with an
+# own run, and released. That build makes the extensions, the installer and its variants for both
+# arches, each on a runner of its own arch, against a registry local to the job, which the imager
+# pulls from, then copies them to ghcr.io as `sha-<commit>` for the release to retag, along with an
 # imager carrying both arches' kernels. nftables-pkg is an input to the nftables extension only and
 # is never published.
 name: CI
@@ -34,6 +34,28 @@ jobs:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - run: tests/imager.sh
       - run: tests/talos-tag.sh
+
+  # Builds the amdgpu extension, as a release does, and compares its modules with the kernel's.
+  amdgpu:
+    runs-on: ubuntu-26.04
+    services:
+      registry:
+        image: registry:3
+        ports: ["5000:5000"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: network=host
+          buildkitd-config-inline: |
+            [registry."localhost:5000"]
+              http = true
+              insecure = true
+      - run: tests/amdgpu.sh
+        env:
+          TEST_REGISTRY: localhost:5000
 
   release-commit:
     if: github.event_name == 'push'
@@ -85,8 +107,8 @@ jobs:
         env:
           VERSION: ${{ needs.release-commit.outputs.version }}
         run: |
-          make extensions installer push TARGET_ARCH=${{ matrix.arch }} TAG=sha-${{ github.sha }} \
-            REGISTRY=localhost:5000 VERSION="$VERSION"
+          make extensions installer push installer-variants TARGET_ARCH=${{ matrix.arch }} \
+            TAG=sha-${{ github.sha }} REGISTRY=localhost:5000 VERSION="$VERSION"
 
       - name: Publish them
         run: |
@@ -169,8 +191,18 @@ jobs:
       image: ghcr.io/slipmesh/imager
       tag: ${{ needs.release-commit.outputs.version }}
 
+  promote-amdgpu:
+    needs: [release-commit, manifest]
+    uses: slipmesh/.github/.github/workflows/promote.yml@v2.4
+    permissions:
+      contents: read
+      packages: write
+    with:
+      image: ghcr.io/slipmesh/talos-installer-amdgpu
+      tag: ${{ needs.release-commit.outputs.version }}
+
   tag:
-    needs: [release-commit, promote, promote-imager]
+    needs: [release-commit, promote, promote-imager, promote-amdgpu]
     uses: slipmesh/.github/.github/workflows/tag-release.yml@v2.4
     permissions:
       contents: write

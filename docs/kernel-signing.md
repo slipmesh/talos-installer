@@ -14,6 +14,12 @@ and copies its `.ko` files into the extension, the way upstream's `storage/zfs` 
 Nothing is recompiled, so the signature stays as talos-kernel made it. The package's test fails
 the build if any module lacks the `~Module signature appended~` marker.
 
+The kernel's own modules are signed in the same build. Those Talos ships as an extension rather
+than in the initramfs come out of the kernel image the same way: the `amdgpu` variant's
+`extensions/drm/amdgpu/pkg.yaml` is upstream's, with the modules taken from talos-kernel's kernel
+instead of siderolabs'. A module from siderolabs' kernel carries the marker too, signed with a key
+this kernel refuses, so `tests/amdgpu.sh` compares the modules with the kernel's byte for byte.
+
 ## The kernel: the stock imager with two files swapped
 
 `make installer` gets a matching `vmlinuz` and `initramfs.xz` from a siderolabs/talos checkout,
