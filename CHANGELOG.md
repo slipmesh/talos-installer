@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and follows [Semantic Versioning](https://semver.org/).
 
+## [1.14.6+sm.1] - 2026-11-13
+
+### Build system 🛠️
+
+- Build the installer for talos v1.14.6 (#49)
+
 ## [1.14.5+sm.4] - 2026-11-04
 
 ### Build system 🛠️
