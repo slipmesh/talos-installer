@@ -59,7 +59,7 @@ jobs:
 
   release-commit:
     if: github.event_name == 'push'
-    uses: slipmesh/.github/.github/workflows/release-commit.yml@v2.4
+    uses: slipmesh/.github/.github/workflows/release-commit.yml@v4.0.2
 
   build:
     needs: [pins, release-commit]
@@ -174,7 +174,7 @@ jobs:
 
   promote:
     needs: [release-commit, manifest]
-    uses: slipmesh/.github/.github/workflows/promote.yml@v2.4
+    uses: slipmesh/.github/.github/workflows/promote.yml@v4.0.2
     permissions:
       contents: read
       packages: write
@@ -183,7 +183,7 @@ jobs:
 
   promote-imager:
     needs: [release-commit, imager]
-    uses: slipmesh/.github/.github/workflows/promote.yml@v2.4
+    uses: slipmesh/.github/.github/workflows/promote.yml@v4.0.2
     permissions:
       contents: read
       packages: write
@@ -193,7 +193,7 @@ jobs:
 
   promote-amdgpu:
     needs: [release-commit, manifest]
-    uses: slipmesh/.github/.github/workflows/promote.yml@v2.4
+    uses: slipmesh/.github/.github/workflows/promote.yml@v4.0.2
     permissions:
       contents: read
       packages: write
@@ -203,7 +203,7 @@ jobs:
 
   tag:
     needs: [release-commit, promote, promote-imager, promote-amdgpu]
-    uses: slipmesh/.github/.github/workflows/tag-release.yml@v2.4
+    uses: slipmesh/.github/.github/workflows/tag-release.yml@v4.0.2
     permissions:
       contents: write
     with:
@@ -211,7 +211,7 @@ jobs:
 
   release:
     needs: [release-commit, tag]
-    uses: slipmesh/.github/.github/workflows/release.yml@v2.4
+    uses: slipmesh/.github/.github/workflows/release.yml@v4.0.2
     permissions:
       contents: write
     with:
