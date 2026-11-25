@@ -27,6 +27,7 @@ release. Talos' own initramfs, with machined, is built from that release's sourc
 | patch | why |
 | --- | --- |
 | `network-history-capacity.patch` | raises the resource event history of the `network` namespace from 1024 to 100,000 events: a burst of ~10k kernel routes from BIRD overruns 1024 and reboots the node ([siderolabs/talos#14679](https://github.com/siderolabs/talos/issues/14679)) |
+| `tools-dis-vulncheck.patch` | moves the build's `dis-vulncheck` tool to the version upstream `main` took, which drops `github.com/ONSdigital/dp-mocking`: that module was deleted and the Go proxy no longer serves it, so `go mod download` fails the initramfs build |
 
 ## Layout
 
