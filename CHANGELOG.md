@@ -16,6 +16,10 @@ and follows [Semantic Versioning](https://semver.org/).
 - Open the release PR as the organisation's ci app (release-1.14) (#59)
 - Move the shared workflows to v4.0.2 (release-1.14) (#62)
 
+### Fixed 🐛
+
+- Build talos without the deleted dp-mocking module (#65)
+
 ## [1.14.6+sm.2] - 2026-11-17
 
 ### Build system 🛠️
