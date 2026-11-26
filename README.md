@@ -30,7 +30,11 @@ The extensions are built with siderolabs/extensions' own bldr pipeline, at the t
 release `KERNEL_RELEASE` names; the installer is baked by the stock siderolabs imager of that
 release. Talos' own initramfs, with machined, is built from that release's source, so that a
 node reports the release as its version (see [RELEASING.md](docs/RELEASING.md)). A fix Talos does
-not carry yet goes in as `talos/<name>.patch`, applied to that source; there is none at present.
+not carry yet goes in as `talos/<name>.patch`, applied to that source:
+
+| patch | why |
+| --- | --- |
+| `tools-dis-vulncheck.patch` | moves the build's `dis-vulncheck` tool to the version upstream `main` took, which drops `github.com/ONSdigital/dp-mocking`: that module was deleted and the Go proxy no longer serves it, so `go mod download` fails the initramfs build |
 
 ## Layout
 
