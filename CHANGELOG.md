@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and follows [Semantic Versioning](https://semver.org/).
 
+## [1.15.0-beta.0+sm.5] - 2026-11-27
+
+### Build system 🛠️
+
+- Raise the minor version for a breaking change before 1.0 (#60)
+- Take the daemons from talos-extensions v1.15.0-beta.0+sm.7 (#68)
+
+### CI/CD ⚙️
+
+- Open the release PR as the organisation's ci app (#58)
+- Move the shared workflows to v4.0.2 (#61)
+
+### Fixed 🐛
+
+- Build talos without the deleted dp-mocking module (#67)
+
 ## [1.15.0-beta.0+sm.4] - 2026-11-17
 
 ### Build system 🛠️
