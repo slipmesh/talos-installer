@@ -24,7 +24,7 @@ client depends only on `allowed_ips`:
 - **no `allowed_ips`**: full tunnel (`0.0.0.0/0`, `::/0`), no handshake polling, no kernel route.
   For node-to-node links, where a routing protocol over the tunnel provides reachability.
 - **explicit `allowed_ips`**: exactly those CIDRs, handshake polled every second, a kernel route
-  per CIDR while the handshake is fresher than `handshake_stale_secs` (default 180). For
+  per CIDR while the last handshake is less than 180 seconds old. For
   road-warrior clients: the route is the "connected" signal.
 
 ```yaml
