@@ -6,9 +6,9 @@ Pure userspace, no kernel module. Two binaries, in `/usr/local/lib/containers/nf
   [talos-extensions](https://github.com/slipmesh/talos-extensions); its README, `nftables`
   section, documents the config and the reference ruleset template. It renders the ruleset
   template `/etc/talos-extensions/nftables.conf.j2` with values only the running node knows, such
-  as the interface carrying the default route, applies it, and keeps watching with `nft monitor`:
-  a first iptables-nft bootstrap around kubelet and kube-proxy startup can remove its tables in a
-  boot-time race, and it then reapplies them.
+  as its uplinks, applies it, renders and applies it again when the uplinks change, and keeps
+  watching with `nft monitor`: a first iptables-nft bootstrap around kubelet and kube-proxy startup
+  can remove its tables in a boot-time race, and it then reapplies them.
 - `nft`, built statically here by `pkgs/nftables-pkg`.
 
 ## A static `nft`
@@ -42,7 +42,9 @@ it.
 ## Machine config
 
 The `ExtensionServiceConfig` must be named `nftables`, with the template mounted at exactly
-`/etc/talos-extensions/nftables.conf.j2`:
+`/etc/talos-extensions/nftables.conf.j2`. The route classes and vars the template reads come from
+an optional `/etc/talos-extensions/firewall.yaml` in the same config; `slipmesh-taloscfg` writes
+both:
 
 ```yaml
 apiVersion: v1alpha1

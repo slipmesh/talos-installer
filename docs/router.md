@@ -34,7 +34,7 @@ bgp_as: 64512
 bgp_peers:                          # every other mesh node; a single bare IPv6 address each
   - name: node-b
     address: 2001:db8::2
-ospf_interfaces: ["mesh-*"]         # names, shell globs or CIDRs, as BIRD's `interface` takes them
+ospf_interfaces: ["mesh-*"]         # interface names, or a prefix and `*`
 learn: ["198.51.100.0/24"]           # kernel routes inside these are re-announced over iBGP
 announce:
   - net: "10.96.0.0/12"
